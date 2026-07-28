@@ -3305,7 +3305,7 @@ class StaticLibrarySymbolsBuilder(mx.ArchivableProject):
 
 class BaseJDKStaticLibrarySymbolsBuilder(StaticLibrarySymbolsBuilder):
     def __init__(self):
-        super().__init__(suite, 'svm-static-library-symbols', [], None, None)
+        super().__init__(suite, 'jdk-static-library-symbols', [], None, None)
 
     def _static_lib_root(self):
         return join(mx_sdk_vm.base_jdk().home, 'lib', 'static')
@@ -3313,6 +3313,19 @@ class BaseJDKStaticLibrarySymbolsBuilder(StaticLibrarySymbolsBuilder):
     def _manifest_path(self, static_lib):
         relative_path = os.path.relpath(static_lib, self._static_lib_root())
         return join(self.get_output_root(), 'static', relative_path + '.symbols')
+
+
+class SVMStaticLibrarySymbolsBuilder(StaticLibrarySymbolsBuilder):
+    def __init__(self):
+        self.native_jvm_project_name = 'com.oracle.svm.native.jvm.windows' if mx.is_windows() else 'com.oracle.svm.native.jvm.posix'
+        super().__init__(suite, 'svm-static-library-symbols', [self.native_jvm_project_name], None, None)
+
+    def _static_lib_root(self):
+        return mx.project(self.native_jvm_project_name).get_output_root()
+
+    def _manifest_path(self, static_lib):
+        relative_path = os.path.relpath(static_lib, self._static_lib_root())
+        return join(self.get_output_root(), relative_path + '.symbols')
 
 
 class StaticLibrarySymbolsBuildTask(mx.ArchivableBuildTask):
@@ -3422,6 +3435,7 @@ class StaticLibrarySymbolsBuildTask(mx.ArchivableBuildTask):
 def mx_register_dynamic_suite_constituents(register_project, register_distribution):
     register_project(SubstrateCompilerFlagsBuilder())
     register_project(BaseJDKStaticLibrarySymbolsBuilder())
+    register_project(SVMStaticLibrarySymbolsBuilder())
 
     base_jdk_home = mx_sdk_vm.base_jdk().home
     lib_static = join(base_jdk_home, 'lib', 'static')
@@ -3429,7 +3443,7 @@ def mx_register_dynamic_suite_constituents(register_project, register_distributi
         layout = {
             './': ['file:' + lib_static],
         }
-        layout['./'].append('dependency:svm-static-library-symbols/*')
+        layout['./'].append('dependency:jdk-static-library-symbols/*')
     else:
         lib_prefix = mx.add_lib_prefix('')
         lib_suffix = mx.add_static_lib_suffix('')

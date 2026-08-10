@@ -3430,7 +3430,7 @@ class StaticLibrarySymbolsBuildTask(mx.ArchivableBuildTask):
             # be derived. Archives without a counterpart are valid only when their manifest is
             # empty, which identifies them as non-JNI libraries for this purpose.
             if self.subject._require_dynamic_lib_for_symbols() and symbols:
-                mx.abort('{} exports JNI symbols but has no matching dynamic library'.format(static_lib))
+                mx.abort(f'{static_lib} exports JNI symbols but has no matching dynamic library')
             dependencies = []
         else:
             dependencies = self._collect_dependencies(dynamic_lib, self.subject._static_libs())

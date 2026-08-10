@@ -562,6 +562,7 @@ public final class NativeLibraries {
             singleton().addStaticJniLibrary(library, dependencies);
         }
 
+        @SuppressWarnings("static-method")
         public boolean isBuiltin() {
             return true;
         }

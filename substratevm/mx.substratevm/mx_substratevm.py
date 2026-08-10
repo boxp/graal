@@ -3534,12 +3534,14 @@ class StaticLibrarySymbolsBuildTask(mx.ArchivableBuildTask):
 
         # Ignore operating-system dependencies such as libc: the static dependency graph only
         # models libraries that are available as JDK static archives in the same distribution.
+        # Also ignore the inspected library itself.
         static_library_names = {cls._library_name(path).lower(): cls._library_name(path) for path in static_libs}
+        dynamic_library_name = cls._library_name(dynamic_lib).lower()
         result = set()
         for dependency in dependencies:
             dependency_name = cls._library_name(dependency)
             static_library_name = static_library_names.get(dependency_name.lower())
-            if static_library_name is not None:
+            if static_library_name is not None and static_library_name.lower() != dynamic_library_name:
                 result.add(static_library_name)
         return result
 

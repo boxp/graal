@@ -3741,7 +3741,7 @@ public final class Interpreter {
             tosCache.pushFloat(expandedState.top, frame, pool.uncheckedFloatAt(cpi));
             return;
         }
-        resolveConstantAtSlowPath(frame, state, expandedState, cpi, opcode, pool, tosCache);
+        resolveConstantAtSlowPath(frame, state, tosCache.materializedTop(expandedState.top, frame), cpi, opcode, pool);
     }
 
     private static void loadConstant2(InterpreterFrame frame, Root.State state, Root.ExpandedState expandedState, int cpi, Root.TOSCache tosCache) {
@@ -3757,45 +3757,44 @@ public final class Interpreter {
             tosCache.pushDouble(expandedState.top, frame, pool.uncheckedDoubleAt(cpi));
             return;
         }
-        resolveConstantAtSlowPath(frame, state, expandedState, cpi, LDC2_W, pool, tosCache);
+        resolveConstantAtSlowPath(frame, state, tosCache.materializedTop(expandedState.top, frame), cpi, LDC2_W, pool);
     }
 
     /**
      * Resolves non-primitive constant-pool entries that can execute arbitrary Java code.
      */
     @NeverInline("Keep constant resolution out of the bytecode-handler stubs")
-    private static void resolveConstantAtSlowPath(InterpreterFrame frame, Root.State state, Root.ExpandedState expandedState, int cpi, int opcode,
-                    InterpreterConstantPool pool, Root.TOSCache tosCache) {
+    private static void resolveConstantAtSlowPath(InterpreterFrame frame, Root.State state, long top, int cpi, int opcode, InterpreterConstantPool pool) {
         InterpreterResolvedJavaMethod method = state.method;
         char narrowCpi = (char) cpi;
         ConstantPool.Tag tag = pool.uncheckedTagAt(cpi);
         switch (tag) {
             case CLASS -> {
                 InterpreterResolvedJavaType resolvedType = resolveType(method, opcode, narrowCpi);
-                tosCache.pushObject(expandedState.top, frame, resolvedType.getJavaClass());
+                putObject(frame, top, resolvedType.getJavaClass());
             }
             case STRING -> {
                 String string = pool.resolveStringAt(cpi);
-                tosCache.pushObject(expandedState.top, frame, string);
+                putObject(frame, top, string);
             }
             case METHODTYPE -> {
-                tosCache.pushObject(expandedState.top, frame, resolveMethodType(pool, method, opcode, narrowCpi));
+                putObject(frame, top, resolveMethodType(pool, method, opcode, narrowCpi));
             }
             case METHODHANDLE -> {
-                tosCache.pushObject(expandedState.top, frame, resolveMethodHandle(pool, method, opcode, narrowCpi));
+                putObject(frame, top, resolveMethodHandle(pool, method, opcode, narrowCpi));
             }
             case DYNAMIC -> {
                 Object constant = resolveDynamicConstant(pool, method, opcode, narrowCpi);
                 switch (symbolToJvmciKind(pool.dynamicType(cpi))) {
-                    case Boolean -> tosCache.pushInt(expandedState.top, frame, (Boolean) constant ? 1 : 0);
-                    case Byte -> tosCache.pushInt(expandedState.top, frame, (Byte) constant);
-                    case Short -> tosCache.pushInt(expandedState.top, frame, (Short) constant);
-                    case Char -> tosCache.pushInt(expandedState.top, frame, (Character) constant);
-                    case Int -> tosCache.pushInt(expandedState.top, frame, (Integer) constant);
-                    case Float -> tosCache.pushFloat(expandedState.top, frame, (Float) constant);
-                    case Long -> tosCache.pushLong(expandedState.top, frame, (Long) constant);
-                    case Double -> tosCache.pushDouble(expandedState.top, frame, (Double) constant);
-                    case Object -> tosCache.pushObject(expandedState.top, frame, constant);
+                    case Boolean -> putInt(frame, top, (Boolean) constant ? 1 : 0);
+                    case Byte -> putInt(frame, top, (Byte) constant);
+                    case Short -> putInt(frame, top, (Short) constant);
+                    case Char -> putInt(frame, top, (Character) constant);
+                    case Int -> putInt(frame, top, (Integer) constant);
+                    case Float -> putFloat(frame, top, (Float) constant);
+                    case Long -> putLong(frame, top, (Long) constant);
+                    case Double -> putDouble(frame, top, (Double) constant);
+                    case Object -> putObject(frame, top, constant);
                     default -> throw VMError.shouldNotReachHere("Unexpected dynamic constant type " + pool.dynamicType(cpi));
                 }
             }
@@ -3807,10 +3806,10 @@ public final class Interpreter {
                 if (appendix instanceof ReferenceConstant<?> referenceConstant) {
                     VMError.guarantee(referenceConstant.isNonNull(), FAILURE_CONSTANT_NOT_PART_OF_IMAGE_HEAP);
                     Object constantValue = referenceConstant.getReferent();
-                    tosCache.pushObject(expandedState.top, frame, constantValue);
+                    putObject(frame, top, constantValue);
                 } else {
                     // Raw object.
-                    tosCache.pushObject(expandedState.top, frame, appendix);
+                    putObject(frame, top, appendix);
                 }
             }
             default -> throw VMError.unimplemented("LDC* constant pool type " + tag);

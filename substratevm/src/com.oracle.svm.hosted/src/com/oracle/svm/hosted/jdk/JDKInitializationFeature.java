@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2019, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -113,6 +113,11 @@ public class JDKInitializationFeature extends JNIRegistrationUtil implements Int
         rci.initializeAtBuildTime("jdk.management.jfr.internal.FlightRecorderMXBeanProvider$SingleMBeanComponent", "Ends up in the image heap with -H:Preserve=all");
 
         rci.initializeAtBuildTime("jdk.internal", JDK_CLASS_REASON);
+        /*
+         * Override the package-wide policy because FileSystemImpl loads management_agent in its
+         * static initializer.
+         */
+        rci.initializeAtRunTime("jdk.internal.agent.FileSystemImpl", "Loads the management_agent library at run time");
         rci.initializeAtBuildTime("jdk.jfr", "Needed for Native Image substitutions");
         rci.initializeAtRunTime("jdk.jfr.snippets.Snippets$HelloWorld", "Fails build-time initialization");
         rci.initializeAtRunTime("jdk.jfr.snippets.Snippets$HTTPPostRequest", "Fails build-time initialization");

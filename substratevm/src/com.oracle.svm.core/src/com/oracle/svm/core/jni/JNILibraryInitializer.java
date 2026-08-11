@@ -25,7 +25,6 @@
 package com.oracle.svm.core.jni;
 
 import java.util.Collection;
-import java.util.function.Predicate;
 
 import org.graalvm.collections.EconomicMap;
 import org.graalvm.collections.Equivalence;
@@ -69,10 +68,10 @@ public class JNILibraryInitializer implements NativeLibrarySupport.LibraryInitia
     }
 
     @Platforms(Platform.HOSTED_ONLY.class)
-    public boolean fillCGlobalDataMap(Collection<String> staticLibNames, Predicate<String> hasOnLoadSymbol) {
+    public boolean fillCGlobalDataMap(Collection<String> staticLibNames) {
         boolean mapIsChanged = false;
         for (String libName : staticLibNames) {
-            if (!onLoadCGlobalDataMap.containsKey(libName) && hasOnLoadSymbol.test(libName)) {
+            if (!onLoadCGlobalDataMap.containsKey(libName) && !(Platform.includedIn(Platform.WINDOWS.class) && libName.equals("extnet"))) {
                 CGlobalData<PointerBase> onLoadCGlobalData = CGlobalDataFactory.forSymbol(getOnLoadName(libName, true), true);
                 onLoadCGlobalDataMap.put(libName, onLoadCGlobalData);
                 mapIsChanged = true;

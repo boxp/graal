@@ -44,7 +44,6 @@ import com.oracle.svm.core.jdk.management.ManagementAgentStartupHook;
 import com.oracle.svm.core.jdk.management.ManagementSupport;
 import com.oracle.svm.guest.staging.jdk.RuntimeSupport;
 import com.oracle.svm.hosted.FeatureImpl.BeforeAnalysisAccessImpl;
-import com.oracle.svm.hosted.c.NativeLibraries;
 import com.oracle.svm.hosted.reflect.proxy.ProxyRegistry;
 import com.oracle.svm.shared.feature.AutomaticallyRegisteredFeature;
 import com.oracle.svm.util.JVMCIReflectionUtil;
@@ -59,15 +58,8 @@ public class JmxServerFeature implements InternalFeature {
         return ImageLayerBuildingSupport.firstImageBuild() && VMInspectionOptions.hasJmxServerSupport();
     }
 
-    private static void handleNativeLibraries() {
-        // This is required for password authentication.
-        // JMX checks the restrictions on the password file via a JNI native method.
-        NativeLibraries.singleton().markPotentialBuiltinJNILibraryReachable("management_agent");
-    }
-
     @Override
     public void beforeAnalysis(BeforeAnalysisAccess access) {
-        handleNativeLibraries();
         registerJMXAgentResources();
         configureReflection((BeforeAnalysisAccessImpl) access);
         configureProxy(access);

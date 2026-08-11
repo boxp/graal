@@ -26,12 +26,6 @@ package com.oracle.svm.interpreter;
 
 import static com.oracle.svm.interpreter.InterpreterFrameUtil.clear;
 import static com.oracle.svm.interpreter.InterpreterFrameUtil.clearReference;
-import static com.oracle.svm.interpreter.InterpreterFrameUtil.dup1;
-import static com.oracle.svm.interpreter.InterpreterFrameUtil.dup2;
-import static com.oracle.svm.interpreter.InterpreterFrameUtil.dup2x1;
-import static com.oracle.svm.interpreter.InterpreterFrameUtil.dup2x2;
-import static com.oracle.svm.interpreter.InterpreterFrameUtil.dupx1;
-import static com.oracle.svm.interpreter.InterpreterFrameUtil.dupx2;
 import static com.oracle.svm.interpreter.InterpreterFrameUtil.getLocalDouble;
 import static com.oracle.svm.interpreter.InterpreterFrameUtil.getLocalFloat;
 import static com.oracle.svm.interpreter.InterpreterFrameUtil.getLocalInt;
@@ -39,10 +33,8 @@ import static com.oracle.svm.interpreter.InterpreterFrameUtil.getLocalLong;
 import static com.oracle.svm.interpreter.InterpreterFrameUtil.getLocalObject;
 import static com.oracle.svm.interpreter.InterpreterFrameUtil.getLocalReturnAddress;
 import static com.oracle.svm.interpreter.InterpreterFrameUtil.popDouble;
-import static com.oracle.svm.interpreter.InterpreterFrameUtil.popFloat;
 import static com.oracle.svm.interpreter.InterpreterFrameUtil.popInt;
 import static com.oracle.svm.interpreter.InterpreterFrameUtil.popLong;
-import static com.oracle.svm.interpreter.InterpreterFrameUtil.popObject;
 import static com.oracle.svm.interpreter.InterpreterFrameUtil.putDouble;
 import static com.oracle.svm.interpreter.InterpreterFrameUtil.putFloat;
 import static com.oracle.svm.interpreter.InterpreterFrameUtil.putInt;
@@ -56,7 +48,6 @@ import static com.oracle.svm.interpreter.InterpreterFrameUtil.setLocalLong;
 import static com.oracle.svm.interpreter.InterpreterFrameUtil.setLocalObject;
 import static com.oracle.svm.interpreter.InterpreterFrameUtil.setLocalObjectOrReturnAddress;
 import static com.oracle.svm.interpreter.InterpreterFrameUtil.startingStackOffset;
-import static com.oracle.svm.interpreter.InterpreterFrameUtil.swapSingle;
 import static com.oracle.svm.interpreter.InterpreterOptions.InterpreterTraceSupport;
 import static com.oracle.svm.interpreter.InterpreterToVM.nullCheck;
 import static com.oracle.svm.interpreter.InterpreterUtil.invalidOpcode;
@@ -317,6 +308,7 @@ import jdk.graal.compiler.api.directives.BytecodeInterpreterDirectives.BytecodeI
 import jdk.graal.compiler.api.directives.BytecodeInterpreterDirectives.BytecodeInterpreterHandlerConfig;
 import jdk.graal.compiler.api.directives.GraalDirectives;
 import jdk.graal.compiler.api.replacements.Fold;
+import jdk.internal.vm.annotation.ForceInline;
 import jdk.vm.ci.meta.ExceptionHandler;
 import jdk.vm.ci.meta.JavaConstant;
 import jdk.vm.ci.meta.JavaKind;
@@ -838,72 +830,280 @@ public final class Interpreter {
             private long tosPrimitive1;
             private int tosLevel;
 
+            @AlwaysInline("Keep TOSCache virtual-expanded")
             void pushInt(long sp, InterpreterFrame frame, int value) {
                 pushPrimitive(sp, frame, value);
             }
 
-            int popInt(long sp, InterpreterFrame frame, long offset) {
-                return (int) popPrimitive(sp, frame, offset);
-            }
-
+            @AlwaysInline("Keep TOSCache virtual-expanded")
             void pushFloat(long sp, InterpreterFrame frame, float value) {
                 pushPrimitive(sp, frame, Float.floatToRawIntBits(value));
             }
 
-            float popFloat(long sp, InterpreterFrame frame, long offset) {
-                return Float.intBitsToFloat((int) popPrimitive(sp, frame, offset));
+            @AlwaysInline("Keep TOSCache virtual-expanded")
+            int peekInt(long sp, InterpreterFrame frame, long offset) {
+                return (int) peekPrimitive(sp, frame, offset);
             }
 
+            @AlwaysInline("Keep TOSCache virtual-expanded")
+            float peekFloat(long sp, InterpreterFrame frame, long offset) {
+                return Float.intBitsToFloat((int) peekPrimitive(sp, frame, offset));
+            }
+
+            @AlwaysInline("Keep TOSCache virtual-expanded")
+            long peekLong(long sp, InterpreterFrame frame, long offset) {
+                if (offset >= -tosLevel) {
+                    throw InterpreterUtil.shouldNotReachHereAtRuntime();
+                }
+                return InterpreterFrameUtil.popLong(frame, sp, offset);
+            }
+
+            @AlwaysInline("Keep TOSCache virtual-expanded")
+            double peekDouble(long sp, InterpreterFrame frame, long offset) {
+                if (offset >= -tosLevel) {
+                    throw InterpreterUtil.shouldNotReachHereAtRuntime();
+                }
+                return InterpreterFrameUtil.popDouble(frame, sp, offset);
+            }
+
+            @AlwaysInline("Keep TOSCache virtual-expanded")
             void pushLong(long sp, InterpreterFrame frame, long value) {
                 materialize(sp, frame);
                 putLong(frame, sp, value);
             }
 
+            @AlwaysInline("Keep TOSCache virtual-expanded")
             long popLong(long sp, InterpreterFrame frame, long offset) {
-                assert tosLevel == 0;
+                if (tosLevel != 0) {
+                    throw InterpreterUtil.shouldNotReachHereAtRuntime();
+                }
                 return InterpreterFrameUtil.popLong(frame, sp, offset);
             }
 
+            @AlwaysInline("Keep TOSCache virtual-expanded")
             void pushDouble(long sp, InterpreterFrame frame, double value) {
                 materialize(sp, frame);
                 putDouble(frame, sp, value);
             }
 
+            @AlwaysInline("Keep TOSCache virtual-expanded")
             double popDouble(long sp, InterpreterFrame frame, long offset) {
-                assert tosLevel == 0;
+                if (tosLevel != 0) {
+                    throw InterpreterUtil.shouldNotReachHereAtRuntime();
+                }
                 return InterpreterFrameUtil.popDouble(frame, sp, offset);
             }
 
+            @AlwaysInline("Keep TOSCache virtual-expanded")
             void pushObject(long sp, InterpreterFrame frame, Object value) {
                 materialize(sp, frame);
                 putObject(frame, sp, value);
             }
 
+            @AlwaysInline("Keep TOSCache virtual-expanded")
             Object popObject(long sp, InterpreterFrame frame, long offset) {
-                assert tosLevel == 0;
+                if (tosLevel != 0) {
+                    throw InterpreterUtil.shouldNotReachHereAtRuntime();
+                }
                 return InterpreterFrameUtil.popObject(frame, sp, offset);
             }
 
+            @AlwaysInline("Keep TOSCache virtual-expanded")
             Object peekObject(long sp, InterpreterFrame frame, long depth) {
-                assert tosLevel == 0;
+                if (tosLevel != 0) {
+                    throw InterpreterUtil.shouldNotReachHereAtRuntime();
+                }
                 return InterpreterFrameUtil.peekObject(frame, sp, -1 - depth);
             }
 
+            @AlwaysInline("Keep TOSCache virtual-expanded")
+            Object peekObjectAtOffset(long sp, InterpreterFrame frame, long offset) {
+                if (offset >= -tosLevel) {
+                    throw InterpreterUtil.shouldNotReachHereAtRuntime();
+                }
+                return InterpreterFrameUtil.peekObject(frame, sp, offset);
+            }
+
+            @AlwaysInline("Keep TOSCache virtual-expanded")
             void pushReturnAddress(long sp, InterpreterFrame frame, int targetBCI) {
                 materialize(sp, frame);
                 putReturnAddress(frame, sp, -1, targetBCI);
             }
 
+            @AlwaysInline("Keep TOSCache virtual-expanded")
             Object popReturnAddressOrObject(long sp, InterpreterFrame frame, long offset) {
-                assert tosLevel == 0;
+                if (tosLevel != 0) {
+                    throw InterpreterUtil.shouldNotReachHereAtRuntime();
+                }
                 return InterpreterFrameUtil.popReturnAddressOrObject(frame, sp, offset);
             }
 
+            @AlwaysInline("Materialize before an outlined stack operation without passing TOSCache")
             long materializedTop(long sp, InterpreterFrame frame) {
                 materialize(sp, frame);
                 return sp;
             }
 
+            @AlwaysInline("Keep TOSCache virtual-expanded")
+            void replaceTopWithInt(int consumedSlots, int value) {
+                replaceTopWithPrimitive(consumedSlots, value);
+            }
+
+            @AlwaysInline("Keep TOSCache virtual-expanded")
+            void replaceTopWithFloat(int consumedSlots, float value) {
+                replaceTopWithPrimitive(consumedSlots, Float.floatToRawIntBits(value));
+            }
+
+            @AlwaysInline("Keep TOSCache virtual-expanded")
+            void replaceTopWithLong(long sp, InterpreterFrame frame, int consumedSlots, long value) {
+                materializeSurvivors(sp, frame, consumedSlots);
+                putLong(frame, sp - consumedSlots, value);
+            }
+
+            @AlwaysInline("Keep TOSCache virtual-expanded")
+            void replaceTopWithDouble(long sp, InterpreterFrame frame, int consumedSlots, double value) {
+                materializeSurvivors(sp, frame, consumedSlots);
+                putDouble(frame, sp - consumedSlots, value);
+            }
+
+            @AlwaysInline("Keep TOSCache virtual-expanded")
+            void replaceTopWithObject(long sp, InterpreterFrame frame, int consumedSlots, Object value) {
+                materializeSurvivors(sp, frame, consumedSlots);
+                putObject(frame, sp - consumedSlots, value);
+            }
+
+            @AlwaysInline("Keep TOSCache virtual-expanded")
+            void clear() {
+                tosLevel = 0;
+            }
+
+            @AlwaysInline("Keep TOSCache virtual-expanded")
+            void pop1(InterpreterFrame frame, long sp) {
+                if (tosLevel == 2) {
+                    tosLevel = 1;
+                } else if (tosLevel == 1) {
+                    tosLevel = 0;
+                } else {
+                    clearReference(frame, sp, -1);
+                }
+            }
+
+            @AlwaysInline("Keep TOSCache virtual-expanded")
+            void pop2(InterpreterFrame frame, long sp) {
+                if (tosLevel == 2) {
+                    tosLevel = 0;
+                } else if (tosLevel == 1) {
+                    tosLevel = 0;
+                    clearReference(frame, sp, -2);
+                } else {
+                    clearReference(frame, sp, -1);
+                    clearReference(frame, sp, -2);
+                }
+            }
+
+            @AlwaysInline("Keep TOSCache virtual-expanded")
+            void dup1(InterpreterFrame frame, long sp) {
+                if (tosLevel == 0) {
+                    InterpreterFrameUtil.dup1(frame, sp);
+                } else if (tosLevel == 1) {
+                    tosPrimitive1 = tosPrimitive0;
+                    tosLevel = 2;
+                } else {
+                    putInt(frame, sp - 2, (int) tosPrimitive0);
+                    tosPrimitive0 = tosPrimitive1;
+                }
+            }
+
+            @AlwaysInline("Keep TOSCache virtual-expanded")
+            void dupx1(InterpreterFrame frame, long sp) {
+                if (tosLevel == 0) {
+                    InterpreterFrameUtil.dupx1(frame, sp);
+                } else if (tosLevel == 1) {
+                    frame.copyStatic(sp, -2, sp, -1);
+                    putCachedPrimitive(frame, sp, -2, tosPrimitive0);
+                } else {
+                    putCachedPrimitive(frame, sp, -2, tosPrimitive1);
+                }
+            }
+
+            @AlwaysInline("Keep TOSCache virtual-expanded")
+            void dupx2(InterpreterFrame frame, long sp) {
+                if (tosLevel == 0) {
+                    InterpreterFrameUtil.dupx2(frame, sp);
+                } else if (tosLevel == 1) {
+                    frame.copyStatic(sp, -2, sp, -1);
+                    frame.copyStatic(sp, -3, sp, -2);
+                    putCachedPrimitive(frame, sp, -3, tosPrimitive0);
+                } else {
+                    putCachedPrimitive(frame, sp, -3, tosPrimitive1);
+                }
+            }
+
+            @AlwaysInline("Keep TOSCache virtual-expanded")
+            void dup2(InterpreterFrame frame, long sp) {
+                if (tosLevel == 0) {
+                    InterpreterFrameUtil.dup2(frame, sp);
+                } else if (tosLevel == 1) {
+                    putCachedPrimitive(frame, sp, -1, tosPrimitive0);
+                    frame.copyStatic(sp, -2, sp, 0);
+                } else {
+                    putCachedPrimitive(frame, sp, -2, tosPrimitive0);
+                    putCachedPrimitive(frame, sp, -1, tosPrimitive1);
+                }
+            }
+
+            @AlwaysInline("Keep TOSCache virtual-expanded")
+            void dup2x1(InterpreterFrame frame, long sp) {
+                if (tosLevel == 0) {
+                    InterpreterFrameUtil.dup2x1(frame, sp);
+                } else if (tosLevel == 1) {
+                    frame.copyStatic(sp, -2, sp, 0);
+                    frame.copyStatic(sp, -3, sp, -1);
+                    frame.copyStatic(sp, -2, sp, -3);
+                    putCachedPrimitive(frame, sp, -2, tosPrimitive0);
+                } else {
+                    frame.copyStatic(sp, -3, sp, -1);
+                    putCachedPrimitive(frame, sp, -3, tosPrimitive0);
+                    putCachedPrimitive(frame, sp, -2, tosPrimitive1);
+                }
+            }
+
+            @AlwaysInline("Keep TOSCache virtual-expanded")
+            void dup2x2(InterpreterFrame frame, long sp) {
+                if (tosLevel == 0) {
+                    InterpreterFrameUtil.dup2x2(frame, sp);
+                } else if (tosLevel == 1) {
+                    frame.copyStatic(sp, -2, sp, 0);
+                    frame.copyStatic(sp, -4, sp, 1);
+                    frame.copyStatic(sp, -3, sp, -1);
+                    frame.copyStatic(sp, -2, sp, -4);
+                    putCachedPrimitive(frame, sp, -3, tosPrimitive0);
+                    frame.copyStatic(sp, 1, sp, -2);
+                    clearReference(frame, sp, 1);
+                } else {
+                    frame.copyStatic(sp, -3, sp, -1);
+                    frame.copyStatic(sp, -4, sp, -2);
+                    putCachedPrimitive(frame, sp, -4, tosPrimitive0);
+                    putCachedPrimitive(frame, sp, -3, tosPrimitive1);
+                }
+            }
+
+            @AlwaysInline("Keep TOSCache virtual-expanded")
+            void swapSingle(InterpreterFrame frame, long sp) {
+                if (tosLevel == 0) {
+                    InterpreterFrameUtil.swapSingle(frame, sp);
+                } else if (tosLevel == 1) {
+                    frame.copyStatic(sp, -2, sp, -1);
+                    putCachedPrimitive(frame, sp, -2, tosPrimitive0);
+                    tosLevel = 0;
+                } else {
+                    long tmp = tosPrimitive0;
+                    tosPrimitive0 = tosPrimitive1;
+                    tosPrimitive1 = tmp;
+                }
+            }
+
+            @AlwaysInline("Keep TOSCache virtual-expanded")
             private void pushPrimitive(long sp, InterpreterFrame frame, long value) {
                 if (tosLevel == 0) {
                     tosPrimitive0 = value;
@@ -918,19 +1118,54 @@ public final class Interpreter {
                 }
             }
 
-            private long popPrimitive(long sp, InterpreterFrame frame, long offset) {
-                if (offset == -1 && tosLevel != 0) {
-                    long result = tosLevel == 2 ? tosPrimitive1 : tosPrimitive0;
-                    if (tosLevel == 2) {
-                        putInt(frame, sp - 2, (int) tosPrimitive0);
+            @AlwaysInline("Keep TOSCache virtual-expanded")
+            private long peekPrimitive(long sp, InterpreterFrame frame, long offset) {
+                if (tosLevel == 2) {
+                    if (offset == -1) {
+                        return tosPrimitive1;
                     }
-                    tosLevel = 0;
-                    return result;
+                    if (offset == -2) {
+                        return tosPrimitive0;
+                    }
+                } else if (tosLevel == 1 && offset == -1) {
+                    return tosPrimitive0;
                 }
-                materialize(sp, frame);
+                assert offset < -tosLevel;
                 return InterpreterFrameUtil.peekPrimitive(frame, sp, offset);
             }
 
+            @AlwaysInline("Keep TOSCache virtual-expanded")
+            private void replaceTopWithPrimitive(int consumedSlots, long value) {
+                int survivors = Math.max(0, tosLevel - consumedSlots);
+                assert survivors <= 1;
+                if (survivors == 0) {
+                    tosPrimitive0 = value;
+                    tosLevel = 1;
+                } else {
+                    tosPrimitive1 = value;
+                    tosLevel = 2;
+                }
+            }
+
+            @AlwaysInline("Keep TOSCache virtual-expanded")
+            private void materializeSurvivors(long sp, InterpreterFrame frame, int consumedSlots) {
+                int survivors = Math.max(0, tosLevel - consumedSlots);
+                if (survivors == 2) {
+                    putInt(frame, sp - 2, (int) tosPrimitive0);
+                    putInt(frame, sp - 1, (int) tosPrimitive1);
+                } else if (survivors == 1) {
+                    putInt(frame, sp - tosLevel, (int) tosPrimitive0);
+                }
+                tosLevel = 0;
+            }
+
+            @AlwaysInline("Keep TOSCache virtual-expanded")
+            private static void putCachedPrimitive(InterpreterFrame frame, long sp, long offset, long value) {
+                clearReference(frame, sp, offset);
+                putInt(frame, sp, offset, (int) value);
+            }
+
+            @AlwaysInline("Keep TOSCache virtual-expanded")
             private void materialize(long sp, InterpreterFrame frame) {
                 if (tosLevel == 0) {
                     return;
@@ -1014,7 +1249,7 @@ public final class Interpreter {
 
             InterpreterUtil.guarantee(code != null, "no bytecode stream for %s", method);
 
-            traceInterpreterEnter(method, indent, curBCI, tosCache.materializedTop(expandedState.top, frame));
+            traceInterpreterEnter(method, indent, curBCI, expandedState.top);
             prepareOpcodeForDispatch(curBCI, expandedState, state, frame, tosCache);
 
             while (true) {
@@ -1300,8 +1535,8 @@ public final class Interpreter {
                         case DRETURN: // fall through
                         case ARETURN: // fall through
                         case RETURN: {
-                            Object returnValue = getReturnValueAsObject(frame, method, tosCache.materializedTop(expandedState.top, frame));
-                            returnFromInterpreter(method, indent, curBCI, tosCache.materializedTop(expandedState.top, frame), returnValue);
+                            Object returnValue = getReturnValueAsObject(frame, method, expandedState.top, tosCache);
+                            returnFromInterpreter(method, indent, curBCI, expandedState.top, returnValue);
                             return returnValue;
                         }
                         // @formatter:off
@@ -1369,15 +1604,15 @@ public final class Interpreter {
                     Throwable exception = e instanceof SemanticJavaException ? e.getCause() : e;
                     ExceptionHandler handler = resolveExceptionHandler(method, (int) curBCI, exception);
                     if (handler != null) {
-                        clearOperandStack(frame, method, tosCache.materializedTop(expandedState.top, frame));
+                        clearOperandStack(frame, method, expandedState.top, tosCache);
                         expandedState.top = startingStackOffset(method.getMaxLocals());
                         tosCache.pushObject(expandedState.top, frame, exception);
                         expandedState.top++;
-                        curBCI = beforeJumpChecks(methodProfile, method, frame, forceStayInInterpreter, curBCI, handler.getHandlerBCI(), tosCache.materializedTop(expandedState.top, frame));
+                        curBCI = beforeJumpChecks(methodProfile, method, frame, forceStayInInterpreter, curBCI, handler.getHandlerBCI(), expandedState.top, tosCache);
                         prepareOpcodeForDispatch(curBCI, expandedState, state, frame, tosCache);
                         continue;
                     } else {
-                        traceInterpreterException(method, indent, curBCI, tosCache.materializedTop(expandedState.top, frame));
+                        traceInterpreterException(method, indent, curBCI, expandedState.top);
                         throw uncheckedThrow(exception);
                     }
                 } catch (Throwable e) {
@@ -1425,6 +1660,7 @@ public final class Interpreter {
          * events, and stores the semantic opcode in {@link State#opcode}. Tracing-only
          * configurations do not store the opcode.
          */
+        @ForceInline
         @AlwaysInline("Keep the interpreter fast path call-free")
         private static void prepareOpcodeForDispatch(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
             boolean debuggerEventsSupported = debuggerEventsSupported();
@@ -1432,7 +1668,6 @@ public final class Interpreter {
                 return;
             }
 
-            long materializedTop = tosCache.materializedTop(expandedState.top, frame);
             int opcode = BytecodeStream.opaqueOpcode(state.code, curBCI);
             if (debuggerEventsSupported) {
                 int dispatchBCI = (int) curBCI;
@@ -1454,7 +1689,7 @@ public final class Interpreter {
                 }
             }
             if (InterpreterOptions.InterpreterTraceSupport.getValue()) {
-                traceInterpreterInstruction(frame, state.indent, curBCI, materializedTop, opcode);
+                traceInterpreterInstruction(frame, state.indent, curBCI, tosCache.materializedTop(expandedState.top, frame), opcode);
             }
             if (debuggerEventsSupported) {
                 state.opcode = opcode;
@@ -1538,6 +1773,7 @@ public final class Interpreter {
 
         /** Returns the semantic opcode for the current BCI. */
         @SuppressWarnings("unused")
+        @ForceInline
         @AlwaysInline("Keep semantic opcode replay on the fast path")
         @BytecodeInterpreterFetchOpcode
         private static int fetchOpcode(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
@@ -2009,7 +2245,12 @@ public final class Interpreter {
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = ISTORE, safepoint = false)
         private static long istoreHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            setLocalInt(frame, BytecodeStream.uncheckedReadLocalIndex1(state.code, curBCI), tosCache.popInt(expandedState.top, frame, -1));
+            setLocalInt(frame, BytecodeStream.uncheckedReadLocalIndex1(state.code, curBCI), tosCache.peekInt(expandedState.top, frame, -1));
+            if (tosCache.tosLevel == 2) {
+                tosCache.tosLevel = 1;
+            } else {
+                tosCache.tosLevel = 0;
+            }
             expandedState.top += ConstantBytecodes.stackEffectOf(ISTORE);
             long nextBCI = curBCI + ConstantBytecodes.lengthOf(ISTORE);
             prepareOpcodeForDispatch(nextBCI, expandedState, state, frame, tosCache);
@@ -2029,7 +2270,12 @@ public final class Interpreter {
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = FSTORE, safepoint = false)
         private static long fstoreHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            setLocalFloat(frame, BytecodeStream.uncheckedReadLocalIndex1(state.code, curBCI), tosCache.popFloat(expandedState.top, frame, -1));
+            setLocalFloat(frame, BytecodeStream.uncheckedReadLocalIndex1(state.code, curBCI), tosCache.peekFloat(expandedState.top, frame, -1));
+            if (tosCache.tosLevel == 2) {
+                tosCache.tosLevel = 1;
+            } else {
+                tosCache.tosLevel = 0;
+            }
             expandedState.top += ConstantBytecodes.stackEffectOf(FSTORE);
             long nextBCI = curBCI + ConstantBytecodes.lengthOf(FSTORE);
             prepareOpcodeForDispatch(nextBCI, expandedState, state, frame, tosCache);
@@ -2059,7 +2305,12 @@ public final class Interpreter {
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = ISTORE_0, safepoint = false)
         private static long istore0Handler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            setLocalInt(frame, 0, tosCache.popInt(expandedState.top, frame, -1));
+            setLocalInt(frame, 0, tosCache.peekInt(expandedState.top, frame, -1));
+            if (tosCache.tosLevel == 2) {
+                tosCache.tosLevel = 1;
+            } else {
+                tosCache.tosLevel = 0;
+            }
             expandedState.top += ConstantBytecodes.stackEffectOf(ISTORE_0);
             long nextBCI = curBCI + ConstantBytecodes.lengthOf(ISTORE_0);
             prepareOpcodeForDispatch(nextBCI, expandedState, state, frame, tosCache);
@@ -2069,7 +2320,12 @@ public final class Interpreter {
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = ISTORE_1, safepoint = false)
         private static long istore1Handler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            setLocalInt(frame, 1, tosCache.popInt(expandedState.top, frame, -1));
+            setLocalInt(frame, 1, tosCache.peekInt(expandedState.top, frame, -1));
+            if (tosCache.tosLevel == 2) {
+                tosCache.tosLevel = 1;
+            } else {
+                tosCache.tosLevel = 0;
+            }
             expandedState.top += ConstantBytecodes.stackEffectOf(ISTORE_1);
             long nextBCI = curBCI + ConstantBytecodes.lengthOf(ISTORE_1);
             prepareOpcodeForDispatch(nextBCI, expandedState, state, frame, tosCache);
@@ -2079,7 +2335,12 @@ public final class Interpreter {
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = ISTORE_2, safepoint = false)
         private static long istore2Handler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            setLocalInt(frame, 2, tosCache.popInt(expandedState.top, frame, -1));
+            setLocalInt(frame, 2, tosCache.peekInt(expandedState.top, frame, -1));
+            if (tosCache.tosLevel == 2) {
+                tosCache.tosLevel = 1;
+            } else {
+                tosCache.tosLevel = 0;
+            }
             expandedState.top += ConstantBytecodes.stackEffectOf(ISTORE_2);
             long nextBCI = curBCI + ConstantBytecodes.lengthOf(ISTORE_2);
             prepareOpcodeForDispatch(nextBCI, expandedState, state, frame, tosCache);
@@ -2089,7 +2350,12 @@ public final class Interpreter {
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = ISTORE_3, safepoint = false)
         private static long istore3Handler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            setLocalInt(frame, 3, tosCache.popInt(expandedState.top, frame, -1));
+            setLocalInt(frame, 3, tosCache.peekInt(expandedState.top, frame, -1));
+            if (tosCache.tosLevel == 2) {
+                tosCache.tosLevel = 1;
+            } else {
+                tosCache.tosLevel = 0;
+            }
             expandedState.top += ConstantBytecodes.stackEffectOf(ISTORE_3);
             long nextBCI = curBCI + ConstantBytecodes.lengthOf(ISTORE_3);
             prepareOpcodeForDispatch(nextBCI, expandedState, state, frame, tosCache);
@@ -2139,7 +2405,12 @@ public final class Interpreter {
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = FSTORE_0, safepoint = false)
         private static long fstore0Handler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            setLocalFloat(frame, 0, tosCache.popFloat(expandedState.top, frame, -1));
+            setLocalFloat(frame, 0, tosCache.peekFloat(expandedState.top, frame, -1));
+            if (tosCache.tosLevel == 2) {
+                tosCache.tosLevel = 1;
+            } else {
+                tosCache.tosLevel = 0;
+            }
             expandedState.top += ConstantBytecodes.stackEffectOf(FSTORE_0);
             long nextBCI = curBCI + ConstantBytecodes.lengthOf(FSTORE_0);
             prepareOpcodeForDispatch(nextBCI, expandedState, state, frame, tosCache);
@@ -2149,7 +2420,12 @@ public final class Interpreter {
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = FSTORE_1, safepoint = false)
         private static long fstore1Handler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            setLocalFloat(frame, 1, tosCache.popFloat(expandedState.top, frame, -1));
+            setLocalFloat(frame, 1, tosCache.peekFloat(expandedState.top, frame, -1));
+            if (tosCache.tosLevel == 2) {
+                tosCache.tosLevel = 1;
+            } else {
+                tosCache.tosLevel = 0;
+            }
             expandedState.top += ConstantBytecodes.stackEffectOf(FSTORE_1);
             long nextBCI = curBCI + ConstantBytecodes.lengthOf(FSTORE_1);
             prepareOpcodeForDispatch(nextBCI, expandedState, state, frame, tosCache);
@@ -2159,7 +2435,12 @@ public final class Interpreter {
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = FSTORE_2, safepoint = false)
         private static long fstore2Handler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            setLocalFloat(frame, 2, tosCache.popFloat(expandedState.top, frame, -1));
+            setLocalFloat(frame, 2, tosCache.peekFloat(expandedState.top, frame, -1));
+            if (tosCache.tosLevel == 2) {
+                tosCache.tosLevel = 1;
+            } else {
+                tosCache.tosLevel = 0;
+            }
             expandedState.top += ConstantBytecodes.stackEffectOf(FSTORE_2);
             long nextBCI = curBCI + ConstantBytecodes.lengthOf(FSTORE_2);
             prepareOpcodeForDispatch(nextBCI, expandedState, state, frame, tosCache);
@@ -2169,7 +2450,12 @@ public final class Interpreter {
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = FSTORE_3, safepoint = false)
         private static long fstore3Handler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            setLocalFloat(frame, 3, tosCache.popFloat(expandedState.top, frame, -1));
+            setLocalFloat(frame, 3, tosCache.peekFloat(expandedState.top, frame, -1));
+            if (tosCache.tosLevel == 2) {
+                tosCache.tosLevel = 1;
+            } else {
+                tosCache.tosLevel = 0;
+            }
             expandedState.top += ConstantBytecodes.stackEffectOf(FSTORE_3);
             long nextBCI = curBCI + ConstantBytecodes.lengthOf(FSTORE_3);
             prepareOpcodeForDispatch(nextBCI, expandedState, state, frame, tosCache);
@@ -2259,434 +2545,459 @@ public final class Interpreter {
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = IALOAD, safepoint = false)
         private static long ialoadHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            arrayLoad(frame, tosCache.materializedTop(expandedState.top, frame), IALOAD);
+            arrayLoad(frame, expandedState.top, IALOAD, tosCache);
             return advanceToNextBytecode(curBCI, IALOAD, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = LALOAD, safepoint = false)
         private static long laloadHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            arrayLoad(frame, tosCache.materializedTop(expandedState.top, frame), LALOAD);
+            arrayLoad(frame, expandedState.top, LALOAD, tosCache);
             return advanceToNextBytecode(curBCI, LALOAD, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = FALOAD, safepoint = false)
         private static long faloadHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            arrayLoad(frame, tosCache.materializedTop(expandedState.top, frame), FALOAD);
+            arrayLoad(frame, expandedState.top, FALOAD, tosCache);
             return advanceToNextBytecode(curBCI, FALOAD, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = DALOAD, safepoint = false)
         private static long daloadHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            arrayLoad(frame, tosCache.materializedTop(expandedState.top, frame), DALOAD);
+            arrayLoad(frame, expandedState.top, DALOAD, tosCache);
             return advanceToNextBytecode(curBCI, DALOAD, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = AALOAD, safepoint = false)
         private static long aaloadHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            objectArrayLoad(frame, state.methodProfile, curBCI, tosCache.materializedTop(expandedState.top, frame));
+            objectArrayLoad(frame, state.methodProfile, curBCI, expandedState.top, tosCache);
             return advanceToNextBytecode(curBCI, AALOAD, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = BALOAD, safepoint = false)
         private static long baloadHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            byteArrayLoad(frame, tosCache.materializedTop(expandedState.top, frame));
+            byteArrayLoad(frame, expandedState.top, tosCache);
             return advanceToNextBytecode(curBCI, BALOAD, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = CALOAD, safepoint = false)
         private static long caloadHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            arrayLoad(frame, tosCache.materializedTop(expandedState.top, frame), CALOAD);
+            arrayLoad(frame, expandedState.top, CALOAD, tosCache);
             return advanceToNextBytecode(curBCI, CALOAD, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = SALOAD, safepoint = false)
         private static long saloadHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            arrayLoad(frame, tosCache.materializedTop(expandedState.top, frame), SALOAD);
+            arrayLoad(frame, expandedState.top, SALOAD, tosCache);
             return advanceToNextBytecode(curBCI, SALOAD, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = IASTORE, safepoint = false)
         private static long iastoreHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            arrayStore(frame, tosCache.materializedTop(expandedState.top, frame), IASTORE);
+            arrayStore(frame, expandedState.top, IASTORE, tosCache);
             return advanceToNextBytecode(curBCI, IASTORE, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = LASTORE, safepoint = false)
         private static long lastoreHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            arrayStore(frame, tosCache.materializedTop(expandedState.top, frame), LASTORE);
+            arrayStore(frame, expandedState.top, LASTORE, tosCache);
             return advanceToNextBytecode(curBCI, LASTORE, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = FASTORE, safepoint = false)
         private static long fastoreHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            arrayStore(frame, tosCache.materializedTop(expandedState.top, frame), FASTORE);
+            arrayStore(frame, expandedState.top, FASTORE, tosCache);
             return advanceToNextBytecode(curBCI, FASTORE, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = DASTORE, safepoint = false)
         private static long dastoreHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            arrayStore(frame, tosCache.materializedTop(expandedState.top, frame), DASTORE);
+            arrayStore(frame, expandedState.top, DASTORE, tosCache);
             return advanceToNextBytecode(curBCI, DASTORE, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = AASTORE, safepoint = false)
         private static long aastoreHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            objectArrayStore(frame, state.methodProfile, curBCI, tosCache.materializedTop(expandedState.top, frame));
+            objectArrayStore(frame, state.methodProfile, curBCI, expandedState.top, tosCache);
             return advanceToNextBytecode(curBCI, AASTORE, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = BASTORE, safepoint = false)
         private static long bastoreHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            byteArrayStore(frame, tosCache.materializedTop(expandedState.top, frame));
+            byteArrayStore(frame, expandedState.top, tosCache);
             return advanceToNextBytecode(curBCI, BASTORE, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = CASTORE, safepoint = false)
         private static long castoreHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            arrayStore(frame, tosCache.materializedTop(expandedState.top, frame), CASTORE);
+            arrayStore(frame, expandedState.top, CASTORE, tosCache);
             return advanceToNextBytecode(curBCI, CASTORE, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = SASTORE, safepoint = false)
         private static long sastoreHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            arrayStore(frame, tosCache.materializedTop(expandedState.top, frame), SASTORE);
+            arrayStore(frame, expandedState.top, SASTORE, tosCache);
             return advanceToNextBytecode(curBCI, SASTORE, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = POP2, safepoint = false)
         private static long pop2Handler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            tosCache.materializedTop(expandedState.top, frame);
-            clearReference(frame, expandedState.top, -1);
-            clearReference(frame, expandedState.top, -2);
+            tosCache.pop2(frame, expandedState.top);
             return advanceToNextBytecode(curBCI, POP2, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = POP, safepoint = false)
         private static long popHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            tosCache.materializedTop(expandedState.top, frame);
-            clearReference(frame, expandedState.top, -1);
+            tosCache.pop1(frame, expandedState.top);
             return advanceToNextBytecode(curBCI, POP, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = DUP, safepoint = false)
         private static long dupHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            dup1(frame, tosCache.materializedTop(expandedState.top, frame));
+            tosCache.dup1(frame, expandedState.top);
             return advanceToNextBytecode(curBCI, DUP, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = DUP_X1, safepoint = false)
         private static long dupX1Handler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            dupx1(frame, tosCache.materializedTop(expandedState.top, frame));
+            tosCache.dupx1(frame, expandedState.top);
             return advanceToNextBytecode(curBCI, DUP_X1, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = DUP_X2, safepoint = false)
         private static long dupX2Handler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            dupx2(frame, tosCache.materializedTop(expandedState.top, frame));
+            tosCache.dupx2(frame, expandedState.top);
             return advanceToNextBytecode(curBCI, DUP_X2, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = DUP2, safepoint = false)
         private static long dup2Handler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            dup2(frame, tosCache.materializedTop(expandedState.top, frame));
+            tosCache.dup2(frame, expandedState.top);
             return advanceToNextBytecode(curBCI, DUP2, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = DUP2_X1, safepoint = false)
         private static long dup2X1Handler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            dup2x1(frame, tosCache.materializedTop(expandedState.top, frame));
+            tosCache.dup2x1(frame, expandedState.top);
             return advanceToNextBytecode(curBCI, DUP2_X1, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = DUP2_X2, safepoint = false)
         private static long dup2X2Handler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            dup2x2(frame, tosCache.materializedTop(expandedState.top, frame));
+            tosCache.dup2x2(frame, expandedState.top);
             return advanceToNextBytecode(curBCI, DUP2_X2, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = SWAP, safepoint = false)
         private static long swapHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            swapSingle(frame, tosCache.materializedTop(expandedState.top, frame));
+            tosCache.swapSingle(frame, expandedState.top);
             return advanceToNextBytecode(curBCI, SWAP, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = IADD, safepoint = false)
         private static long iaddHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            int rhs = tosCache.popInt(expandedState.top, frame, -1);
-            int lhs = tosCache.popInt(expandedState.top, frame, -2);
-            putInt(frame, expandedState.top, -2, lhs + rhs);
+            int result = tosCache.peekInt(expandedState.top, frame, -2) + tosCache.peekInt(expandedState.top, frame, -1);
+            tosCache.replaceTopWithInt(2, result);
             return advanceToNextBytecode(curBCI, IADD, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = LADD, safepoint = false)
         private static long laddHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putLong(frame, tosCache.materializedTop(expandedState.top, frame), -4, popLong(frame, tosCache.materializedTop(expandedState.top, frame), -1) + popLong(frame, tosCache.materializedTop(expandedState.top, frame), -3));
+            long result = tosCache.peekLong(expandedState.top, frame, -3) + tosCache.peekLong(expandedState.top, frame, -1);
+            tosCache.replaceTopWithLong(expandedState.top, frame, 4, result);
             return advanceToNextBytecode(curBCI, LADD, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = FADD, safepoint = false)
         private static long faddHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putFloat(frame, tosCache.materializedTop(expandedState.top, frame), -2, popFloat(frame, tosCache.materializedTop(expandedState.top, frame), -1) + popFloat(frame, tosCache.materializedTop(expandedState.top, frame), -2));
+            float result = tosCache.peekFloat(expandedState.top, frame, -2) + tosCache.peekFloat(expandedState.top, frame, -1);
+            tosCache.replaceTopWithFloat(2, result);
             return advanceToNextBytecode(curBCI, FADD, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = DADD, safepoint = false)
         private static long daddHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putDouble(frame, tosCache.materializedTop(expandedState.top, frame), -4, popDouble(frame, tosCache.materializedTop(expandedState.top, frame), -1) + popDouble(frame, tosCache.materializedTop(expandedState.top, frame), -3));
+            double result = tosCache.peekDouble(expandedState.top, frame, -3) + tosCache.peekDouble(expandedState.top, frame, -1);
+            tosCache.replaceTopWithDouble(expandedState.top, frame, 4, result);
             return advanceToNextBytecode(curBCI, DADD, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = ISUB, safepoint = false)
         private static long isubHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            int rhs = tosCache.popInt(expandedState.top, frame, -1);
-            int lhs = tosCache.popInt(expandedState.top, frame, -2);
-            putInt(frame, expandedState.top, -2, lhs - rhs);
+            int result = tosCache.peekInt(expandedState.top, frame, -2) - tosCache.peekInt(expandedState.top, frame, -1);
+            tosCache.replaceTopWithInt(2, result);
             return advanceToNextBytecode(curBCI, ISUB, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = LSUB, safepoint = false)
         private static long lsubHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putLong(frame, tosCache.materializedTop(expandedState.top, frame), -4, popLong(frame, tosCache.materializedTop(expandedState.top, frame), -3) - popLong(frame, tosCache.materializedTop(expandedState.top, frame), -1));
+            long result = tosCache.peekLong(expandedState.top, frame, -3) - tosCache.peekLong(expandedState.top, frame, -1);
+            tosCache.replaceTopWithLong(expandedState.top, frame, 4, result);
             return advanceToNextBytecode(curBCI, LSUB, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = FSUB, safepoint = false)
         private static long fsubHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putFloat(frame, tosCache.materializedTop(expandedState.top, frame), -2, popFloat(frame, tosCache.materializedTop(expandedState.top, frame), -2) - popFloat(frame, tosCache.materializedTop(expandedState.top, frame), -1));
+            float result = tosCache.peekFloat(expandedState.top, frame, -2) - tosCache.peekFloat(expandedState.top, frame, -1);
+            tosCache.replaceTopWithFloat(2, result);
             return advanceToNextBytecode(curBCI, FSUB, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = DSUB, safepoint = false)
         private static long dsubHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putDouble(frame, tosCache.materializedTop(expandedState.top, frame), -4, popDouble(frame, tosCache.materializedTop(expandedState.top, frame), -3) - popDouble(frame, tosCache.materializedTop(expandedState.top, frame), -1));
+            double result = tosCache.peekDouble(expandedState.top, frame, -3) - tosCache.peekDouble(expandedState.top, frame, -1);
+            tosCache.replaceTopWithDouble(expandedState.top, frame, 4, result);
             return advanceToNextBytecode(curBCI, DSUB, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = IMUL, safepoint = false)
         private static long imulHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putInt(frame, tosCache.materializedTop(expandedState.top, frame), -2, popInt(frame, tosCache.materializedTop(expandedState.top, frame), -1) * popInt(frame, tosCache.materializedTop(expandedState.top, frame), -2));
+            int result = tosCache.peekInt(expandedState.top, frame, -2) * tosCache.peekInt(expandedState.top, frame, -1);
+            tosCache.replaceTopWithInt(2, result);
             return advanceToNextBytecode(curBCI, IMUL, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = LMUL, safepoint = false)
         private static long lmulHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putLong(frame, tosCache.materializedTop(expandedState.top, frame), -4, popLong(frame, tosCache.materializedTop(expandedState.top, frame), -1) * popLong(frame, tosCache.materializedTop(expandedState.top, frame), -3));
+            long result = tosCache.peekLong(expandedState.top, frame, -3) * tosCache.peekLong(expandedState.top, frame, -1);
+            tosCache.replaceTopWithLong(expandedState.top, frame, 4, result);
             return advanceToNextBytecode(curBCI, LMUL, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = FMUL, safepoint = false)
         private static long fmulHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putFloat(frame, tosCache.materializedTop(expandedState.top, frame), -2, popFloat(frame, tosCache.materializedTop(expandedState.top, frame), -1) * popFloat(frame, tosCache.materializedTop(expandedState.top, frame), -2));
+            float result = tosCache.peekFloat(expandedState.top, frame, -2) * tosCache.peekFloat(expandedState.top, frame, -1);
+            tosCache.replaceTopWithFloat(2, result);
             return advanceToNextBytecode(curBCI, FMUL, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = DMUL, safepoint = false)
         private static long dmulHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putDouble(frame, tosCache.materializedTop(expandedState.top, frame), -4, popDouble(frame, tosCache.materializedTop(expandedState.top, frame), -1) * popDouble(frame, tosCache.materializedTop(expandedState.top, frame), -3));
+            double result = tosCache.peekDouble(expandedState.top, frame, -3) * tosCache.peekDouble(expandedState.top, frame, -1);
+            tosCache.replaceTopWithDouble(expandedState.top, frame, 4, result);
             return advanceToNextBytecode(curBCI, DMUL, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = IDIV, safepoint = false)
         private static long idivHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putInt(frame, tosCache.materializedTop(expandedState.top, frame), -2, divInt(popInt(frame, tosCache.materializedTop(expandedState.top, frame), -1), popInt(frame, tosCache.materializedTop(expandedState.top, frame), -2)));
+            int result = divInt(tosCache.peekInt(expandedState.top, frame, -1), tosCache.peekInt(expandedState.top, frame, -2));
+            tosCache.replaceTopWithInt(2, result);
             return advanceToNextBytecode(curBCI, IDIV, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = LDIV, safepoint = false)
         private static long ldivHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putLong(frame, tosCache.materializedTop(expandedState.top, frame), -4, divLong(popLong(frame, tosCache.materializedTop(expandedState.top, frame), -1), popLong(frame, tosCache.materializedTop(expandedState.top, frame), -3)));
+            long result = divLong(tosCache.peekLong(expandedState.top, frame, -1), tosCache.peekLong(expandedState.top, frame, -3));
+            tosCache.replaceTopWithLong(expandedState.top, frame, 4, result);
             return advanceToNextBytecode(curBCI, LDIV, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = FDIV, safepoint = false)
         private static long fdivHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putFloat(frame, tosCache.materializedTop(expandedState.top, frame), -2, divFloat(popFloat(frame, tosCache.materializedTop(expandedState.top, frame), -1), popFloat(frame, tosCache.materializedTop(expandedState.top, frame), -2)));
+            float result = divFloat(tosCache.peekFloat(expandedState.top, frame, -1), tosCache.peekFloat(expandedState.top, frame, -2));
+            tosCache.replaceTopWithFloat(2, result);
             return advanceToNextBytecode(curBCI, FDIV, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = DDIV, safepoint = false)
         private static long ddivHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putDouble(frame, tosCache.materializedTop(expandedState.top, frame), -4, divDouble(popDouble(frame, tosCache.materializedTop(expandedState.top, frame), -1), popDouble(frame, tosCache.materializedTop(expandedState.top, frame), -3)));
+            double result = divDouble(tosCache.peekDouble(expandedState.top, frame, -1), tosCache.peekDouble(expandedState.top, frame, -3));
+            tosCache.replaceTopWithDouble(expandedState.top, frame, 4, result);
             return advanceToNextBytecode(curBCI, DDIV, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = IREM, safepoint = false)
         private static long iremHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putInt(frame, tosCache.materializedTop(expandedState.top, frame), -2, remInt(popInt(frame, tosCache.materializedTop(expandedState.top, frame), -1), popInt(frame, tosCache.materializedTop(expandedState.top, frame), -2)));
+            int result = remInt(tosCache.peekInt(expandedState.top, frame, -1), tosCache.peekInt(expandedState.top, frame, -2));
+            tosCache.replaceTopWithInt(2, result);
             return advanceToNextBytecode(curBCI, IREM, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = LREM, safepoint = false)
         private static long lremHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putLong(frame, tosCache.materializedTop(expandedState.top, frame), -4, remLong(popLong(frame, tosCache.materializedTop(expandedState.top, frame), -1), popLong(frame, tosCache.materializedTop(expandedState.top, frame), -3)));
+            long result = remLong(tosCache.peekLong(expandedState.top, frame, -1), tosCache.peekLong(expandedState.top, frame, -3));
+            tosCache.replaceTopWithLong(expandedState.top, frame, 4, result);
             return advanceToNextBytecode(curBCI, LREM, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = FREM, safepoint = false)
         private static long fremHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putFloat(frame, tosCache.materializedTop(expandedState.top, frame), -2, remFloat(popFloat(frame, tosCache.materializedTop(expandedState.top, frame), -1), popFloat(frame, tosCache.materializedTop(expandedState.top, frame), -2)));
+            float result = remFloat(tosCache.peekFloat(expandedState.top, frame, -1), tosCache.peekFloat(expandedState.top, frame, -2));
+            tosCache.replaceTopWithFloat(2, result);
             return advanceToNextBytecode(curBCI, FREM, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = DREM, safepoint = false)
         private static long dremHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putDouble(frame, tosCache.materializedTop(expandedState.top, frame), -4, remDouble(popDouble(frame, tosCache.materializedTop(expandedState.top, frame), -1), popDouble(frame, tosCache.materializedTop(expandedState.top, frame), -3)));
+            double result = remDouble(tosCache.peekDouble(expandedState.top, frame, -1), tosCache.peekDouble(expandedState.top, frame, -3));
+            tosCache.replaceTopWithDouble(expandedState.top, frame, 4, result);
             return advanceToNextBytecode(curBCI, DREM, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = INEG, safepoint = false)
         private static long inegHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putInt(frame, tosCache.materializedTop(expandedState.top, frame), -1, -popInt(frame, tosCache.materializedTop(expandedState.top, frame), -1));
+            tosCache.replaceTopWithInt(1, -tosCache.peekInt(expandedState.top, frame, -1));
             return advanceToNextBytecode(curBCI, INEG, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = LNEG, safepoint = false)
         private static long lnegHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putLong(frame, tosCache.materializedTop(expandedState.top, frame), -2, -popLong(frame, tosCache.materializedTop(expandedState.top, frame), -1));
+            tosCache.replaceTopWithLong(expandedState.top, frame, 2, -tosCache.peekLong(expandedState.top, frame, -1));
             return advanceToNextBytecode(curBCI, LNEG, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = FNEG, safepoint = false)
         private static long fnegHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putFloat(frame, tosCache.materializedTop(expandedState.top, frame), -1, -popFloat(frame, tosCache.materializedTop(expandedState.top, frame), -1));
+            tosCache.replaceTopWithFloat(1, -tosCache.peekFloat(expandedState.top, frame, -1));
             return advanceToNextBytecode(curBCI, FNEG, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = DNEG, safepoint = false)
         private static long dnegHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putDouble(frame, tosCache.materializedTop(expandedState.top, frame), -2, -popDouble(frame, tosCache.materializedTop(expandedState.top, frame), -1));
+            tosCache.replaceTopWithDouble(expandedState.top, frame, 2, -tosCache.peekDouble(expandedState.top, frame, -1));
             return advanceToNextBytecode(curBCI, DNEG, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = ISHL, safepoint = false)
         private static long ishlHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putInt(frame, tosCache.materializedTop(expandedState.top, frame), -2, shiftLeftInt(popInt(frame, tosCache.materializedTop(expandedState.top, frame), -1), popInt(frame, tosCache.materializedTop(expandedState.top, frame), -2)));
+            int result = shiftLeftInt(tosCache.peekInt(expandedState.top, frame, -1), tosCache.peekInt(expandedState.top, frame, -2));
+            tosCache.replaceTopWithInt(2, result);
             return advanceToNextBytecode(curBCI, ISHL, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = LSHL, safepoint = false)
         private static long lshlHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putLong(frame, tosCache.materializedTop(expandedState.top, frame), -3, shiftLeftLong(popInt(frame, tosCache.materializedTop(expandedState.top, frame), -1), popLong(frame, tosCache.materializedTop(expandedState.top, frame), -2)));
+            long result = shiftLeftLong(tosCache.peekInt(expandedState.top, frame, -1), tosCache.peekLong(expandedState.top, frame, -2));
+            tosCache.replaceTopWithLong(expandedState.top, frame, 3, result);
             return advanceToNextBytecode(curBCI, LSHL, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = ISHR, safepoint = false)
         private static long ishrHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putInt(frame, tosCache.materializedTop(expandedState.top, frame), -2, shiftRightSignedInt(popInt(frame, tosCache.materializedTop(expandedState.top, frame), -1), popInt(frame, tosCache.materializedTop(expandedState.top, frame), -2)));
+            int result = shiftRightSignedInt(tosCache.peekInt(expandedState.top, frame, -1), tosCache.peekInt(expandedState.top, frame, -2));
+            tosCache.replaceTopWithInt(2, result);
             return advanceToNextBytecode(curBCI, ISHR, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = LSHR, safepoint = false)
         private static long lshrHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putLong(frame, tosCache.materializedTop(expandedState.top, frame), -3, shiftRightSignedLong(popInt(frame, tosCache.materializedTop(expandedState.top, frame), -1), popLong(frame, tosCache.materializedTop(expandedState.top, frame), -2)));
+            long result = shiftRightSignedLong(tosCache.peekInt(expandedState.top, frame, -1), tosCache.peekLong(expandedState.top, frame, -2));
+            tosCache.replaceTopWithLong(expandedState.top, frame, 3, result);
             return advanceToNextBytecode(curBCI, LSHR, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = IUSHR, safepoint = false)
         private static long iushrHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putInt(frame, tosCache.materializedTop(expandedState.top, frame), -2, shiftRightUnsignedInt(popInt(frame, tosCache.materializedTop(expandedState.top, frame), -1), popInt(frame, tosCache.materializedTop(expandedState.top, frame), -2)));
+            int result = shiftRightUnsignedInt(tosCache.peekInt(expandedState.top, frame, -1), tosCache.peekInt(expandedState.top, frame, -2));
+            tosCache.replaceTopWithInt(2, result);
             return advanceToNextBytecode(curBCI, IUSHR, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = LUSHR, safepoint = false)
         private static long lushrHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putLong(frame, tosCache.materializedTop(expandedState.top, frame), -3, shiftRightUnsignedLong(popInt(frame, tosCache.materializedTop(expandedState.top, frame), -1), popLong(frame, tosCache.materializedTop(expandedState.top, frame), -2)));
+            long result = shiftRightUnsignedLong(tosCache.peekInt(expandedState.top, frame, -1), tosCache.peekLong(expandedState.top, frame, -2));
+            tosCache.replaceTopWithLong(expandedState.top, frame, 3, result);
             return advanceToNextBytecode(curBCI, LUSHR, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = IAND, safepoint = false)
         private static long iandHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putInt(frame, tosCache.materializedTop(expandedState.top, frame), -2, popInt(frame, tosCache.materializedTop(expandedState.top, frame), -1) & popInt(frame, tosCache.materializedTop(expandedState.top, frame), -2));
+            int result = tosCache.peekInt(expandedState.top, frame, -2) & tosCache.peekInt(expandedState.top, frame, -1);
+            tosCache.replaceTopWithInt(2, result);
             return advanceToNextBytecode(curBCI, IAND, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = LAND, safepoint = false)
         private static long landHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putLong(frame, tosCache.materializedTop(expandedState.top, frame), -4, popLong(frame, tosCache.materializedTop(expandedState.top, frame), -1) & popLong(frame, tosCache.materializedTop(expandedState.top, frame), -3));
+            long result = tosCache.peekLong(expandedState.top, frame, -3) & tosCache.peekLong(expandedState.top, frame, -1);
+            tosCache.replaceTopWithLong(expandedState.top, frame, 4, result);
             return advanceToNextBytecode(curBCI, LAND, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = IOR, safepoint = false)
         private static long iorHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putInt(frame, tosCache.materializedTop(expandedState.top, frame), -2, popInt(frame, tosCache.materializedTop(expandedState.top, frame), -1) | popInt(frame, tosCache.materializedTop(expandedState.top, frame), -2));
+            int result = tosCache.peekInt(expandedState.top, frame, -2) | tosCache.peekInt(expandedState.top, frame, -1);
+            tosCache.replaceTopWithInt(2, result);
             return advanceToNextBytecode(curBCI, IOR, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = LOR, safepoint = false)
         private static long lorHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putLong(frame, tosCache.materializedTop(expandedState.top, frame), -4, popLong(frame, tosCache.materializedTop(expandedState.top, frame), -1) | popLong(frame, tosCache.materializedTop(expandedState.top, frame), -3));
+            long result = tosCache.peekLong(expandedState.top, frame, -3) | tosCache.peekLong(expandedState.top, frame, -1);
+            tosCache.replaceTopWithLong(expandedState.top, frame, 4, result);
             return advanceToNextBytecode(curBCI, LOR, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = IXOR, safepoint = false)
         private static long ixorHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putInt(frame, tosCache.materializedTop(expandedState.top, frame), -2, popInt(frame, tosCache.materializedTop(expandedState.top, frame), -1) ^ popInt(frame, tosCache.materializedTop(expandedState.top, frame), -2));
+            int result = tosCache.peekInt(expandedState.top, frame, -2) ^ tosCache.peekInt(expandedState.top, frame, -1);
+            tosCache.replaceTopWithInt(2, result);
             return advanceToNextBytecode(curBCI, IXOR, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = LXOR, safepoint = false)
         private static long lxorHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putLong(frame, tosCache.materializedTop(expandedState.top, frame), -4, popLong(frame, tosCache.materializedTop(expandedState.top, frame), -1) ^ popLong(frame, tosCache.materializedTop(expandedState.top, frame), -3));
+            long result = tosCache.peekLong(expandedState.top, frame, -3) ^ tosCache.peekLong(expandedState.top, frame, -1);
+            tosCache.replaceTopWithLong(expandedState.top, frame, 4, result);
             return advanceToNextBytecode(curBCI, LXOR, expandedState, state, frame, tosCache);
         }
 
@@ -2701,148 +3012,160 @@ public final class Interpreter {
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = I2L, safepoint = false)
         private static long i2lHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putLong(frame, tosCache.materializedTop(expandedState.top, frame), -1, popInt(frame, tosCache.materializedTop(expandedState.top, frame), -1));
+            long result = tosCache.peekInt(expandedState.top, frame, -1);
+            tosCache.replaceTopWithLong(expandedState.top, frame, 1, result);
             return advanceToNextBytecode(curBCI, I2L, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = I2F, safepoint = false)
         private static long i2fHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putFloat(frame, tosCache.materializedTop(expandedState.top, frame), -1, popInt(frame, tosCache.materializedTop(expandedState.top, frame), -1));
+            tosCache.replaceTopWithFloat(1, tosCache.peekInt(expandedState.top, frame, -1));
             return advanceToNextBytecode(curBCI, I2F, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = I2D, safepoint = false)
         private static long i2dHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putDouble(frame, tosCache.materializedTop(expandedState.top, frame), -1, popInt(frame, tosCache.materializedTop(expandedState.top, frame), -1));
+            double result = tosCache.peekInt(expandedState.top, frame, -1);
+            tosCache.replaceTopWithDouble(expandedState.top, frame, 1, result);
             return advanceToNextBytecode(curBCI, I2D, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = L2I, safepoint = false)
         private static long l2iHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putInt(frame, tosCache.materializedTop(expandedState.top, frame), -2, (int) popLong(frame, tosCache.materializedTop(expandedState.top, frame), -1));
+            tosCache.replaceTopWithInt(2, (int) tosCache.peekLong(expandedState.top, frame, -1));
             return advanceToNextBytecode(curBCI, L2I, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = L2F, safepoint = false)
         private static long l2fHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putFloat(frame, tosCache.materializedTop(expandedState.top, frame), -2, popLong(frame, tosCache.materializedTop(expandedState.top, frame), -1));
+            tosCache.replaceTopWithFloat(2, tosCache.peekLong(expandedState.top, frame, -1));
             return advanceToNextBytecode(curBCI, L2F, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = L2D, safepoint = false)
         private static long l2dHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putDouble(frame, tosCache.materializedTop(expandedState.top, frame), -2, popLong(frame, tosCache.materializedTop(expandedState.top, frame), -1));
+            tosCache.replaceTopWithDouble(expandedState.top, frame, 2, tosCache.peekLong(expandedState.top, frame, -1));
             return advanceToNextBytecode(curBCI, L2D, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = F2I, safepoint = false)
         private static long f2iHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putInt(frame, tosCache.materializedTop(expandedState.top, frame), -1, (int) popFloat(frame, tosCache.materializedTop(expandedState.top, frame), -1));
+            tosCache.replaceTopWithInt(1, (int) tosCache.peekFloat(expandedState.top, frame, -1));
             return advanceToNextBytecode(curBCI, F2I, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = F2L, safepoint = false)
         private static long f2lHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putLong(frame, tosCache.materializedTop(expandedState.top, frame), -1, (long) popFloat(frame, tosCache.materializedTop(expandedState.top, frame), -1));
+            tosCache.replaceTopWithLong(expandedState.top, frame, 1, (long) tosCache.peekFloat(expandedState.top, frame, -1));
             return advanceToNextBytecode(curBCI, F2L, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = F2D, safepoint = false)
         private static long f2dHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putDouble(frame, tosCache.materializedTop(expandedState.top, frame), -1, popFloat(frame, tosCache.materializedTop(expandedState.top, frame), -1));
+            tosCache.replaceTopWithDouble(expandedState.top, frame, 1, tosCache.peekFloat(expandedState.top, frame, -1));
             return advanceToNextBytecode(curBCI, F2D, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = D2I, safepoint = false)
         private static long d2iHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putInt(frame, tosCache.materializedTop(expandedState.top, frame), -2, (int) popDouble(frame, tosCache.materializedTop(expandedState.top, frame), -1));
+            tosCache.replaceTopWithInt(2, (int) tosCache.peekDouble(expandedState.top, frame, -1));
             return advanceToNextBytecode(curBCI, D2I, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = D2L, safepoint = false)
         private static long d2lHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putLong(frame, tosCache.materializedTop(expandedState.top, frame), -2, (long) popDouble(frame, tosCache.materializedTop(expandedState.top, frame), -1));
+            tosCache.replaceTopWithLong(expandedState.top, frame, 2, (long) tosCache.peekDouble(expandedState.top, frame, -1));
             return advanceToNextBytecode(curBCI, D2L, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = D2F, safepoint = false)
         private static long d2fHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putFloat(frame, tosCache.materializedTop(expandedState.top, frame), -2, (float) popDouble(frame, tosCache.materializedTop(expandedState.top, frame), -1));
+            tosCache.replaceTopWithFloat(2, (float) tosCache.peekDouble(expandedState.top, frame, -1));
             return advanceToNextBytecode(curBCI, D2F, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = I2B, safepoint = false)
         private static long i2bHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putInt(frame, tosCache.materializedTop(expandedState.top, frame), -1, (byte) popInt(frame, tosCache.materializedTop(expandedState.top, frame), -1));
+            tosCache.replaceTopWithInt(1, (byte) tosCache.peekInt(expandedState.top, frame, -1));
             return advanceToNextBytecode(curBCI, I2B, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = I2C, safepoint = false)
         private static long i2cHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putInt(frame, tosCache.materializedTop(expandedState.top, frame), -1, (char) popInt(frame, tosCache.materializedTop(expandedState.top, frame), -1));
+            tosCache.replaceTopWithInt(1, (char) tosCache.peekInt(expandedState.top, frame, -1));
             return advanceToNextBytecode(curBCI, I2C, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = I2S, safepoint = false)
         private static long i2sHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putInt(frame, tosCache.materializedTop(expandedState.top, frame), -1, (short) popInt(frame, tosCache.materializedTop(expandedState.top, frame), -1));
+            tosCache.replaceTopWithInt(1, (short) tosCache.peekInt(expandedState.top, frame, -1));
             return advanceToNextBytecode(curBCI, I2S, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = LCMP, safepoint = false)
         private static long lcmpHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putInt(frame, tosCache.materializedTop(expandedState.top, frame), -4, compareLong(popLong(frame, tosCache.materializedTop(expandedState.top, frame), -1), popLong(frame, tosCache.materializedTop(expandedState.top, frame), -3)));
+            int result = compareLong(tosCache.peekLong(expandedState.top, frame, -1), tosCache.peekLong(expandedState.top, frame, -3));
+            tosCache.replaceTopWithInt(4, result);
             return advanceToNextBytecode(curBCI, LCMP, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = FCMPL, safepoint = false)
         private static long fcmplHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putInt(frame, tosCache.materializedTop(expandedState.top, frame), -2, compareFloatLess(popFloat(frame, tosCache.materializedTop(expandedState.top, frame), -1), popFloat(frame, tosCache.materializedTop(expandedState.top, frame), -2)));
+            int result = compareFloatLess(tosCache.peekFloat(expandedState.top, frame, -1), tosCache.peekFloat(expandedState.top, frame, -2));
+            tosCache.replaceTopWithInt(2, result);
             return advanceToNextBytecode(curBCI, FCMPL, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = FCMPG, safepoint = false)
         private static long fcmpgHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putInt(frame, tosCache.materializedTop(expandedState.top, frame), -2, compareFloatGreater(popFloat(frame, tosCache.materializedTop(expandedState.top, frame), -1), popFloat(frame, tosCache.materializedTop(expandedState.top, frame), -2)));
+            int result = compareFloatGreater(tosCache.peekFloat(expandedState.top, frame, -1), tosCache.peekFloat(expandedState.top, frame, -2));
+            tosCache.replaceTopWithInt(2, result);
             return advanceToNextBytecode(curBCI, FCMPG, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = DCMPL, safepoint = false)
         private static long dcmplHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putInt(frame, tosCache.materializedTop(expandedState.top, frame), -4, compareDoubleLess(popDouble(frame, tosCache.materializedTop(expandedState.top, frame), -1), popDouble(frame, tosCache.materializedTop(expandedState.top, frame), -3)));
+            int result = compareDoubleLess(tosCache.peekDouble(expandedState.top, frame, -1), tosCache.peekDouble(expandedState.top, frame, -3));
+            tosCache.replaceTopWithInt(4, result);
             return advanceToNextBytecode(curBCI, DCMPL, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = DCMPG, safepoint = false)
         private static long dcmpgHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            putInt(frame, tosCache.materializedTop(expandedState.top, frame), -4,
-                            compareDoubleGreater(popDouble(frame, tosCache.materializedTop(expandedState.top, frame), -1), popDouble(frame, tosCache.materializedTop(expandedState.top, frame), -3)));
+            int result = compareDoubleGreater(tosCache.peekDouble(expandedState.top, frame, -1), tosCache.peekDouble(expandedState.top, frame, -3));
+            tosCache.replaceTopWithInt(4, result);
             return advanceToNextBytecode(curBCI, DCMPG, expandedState, state, frame, tosCache);
         }
 
+        @ForceInline
         @AlwaysInline("Fold primitive branch opcode in individual handlers")
         private static long primitive1Branch(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, int curOpcode, TOSCache tosCache) {
-            boolean branchTaken = takeBranchPrimitive1(tosCache.popInt(expandedState.top, frame, -1), curOpcode);
+            boolean branchTaken = takeBranchPrimitive1(tosCache.peekInt(expandedState.top, frame, -1), curOpcode);
             profileBranch(state.methodProfile, curBCI, branchTaken);
+            if (tosCache.tosLevel == 2) {
+                tosCache.tosLevel = 1;
+            } else {
+                tosCache.tosLevel = 0;
+            }
             if (branchTaken) {
                 expandedState.top += Bytecodes.stackEffectOf(curOpcode);
                 return finishJump(curBCI, BytecodeStream.uncheckedReadBranchDest2(state.code, curBCI), expandedState, state, frame, tosCache);
@@ -2886,12 +3209,14 @@ public final class Interpreter {
             return primitive1Branch(curBCI, expandedState, state, frame, IFLE, tosCache);
         }
 
+        @ForceInline
         @AlwaysInline("Fold primitive compare branch opcode in individual handlers")
         private static long primitive2Branch(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, int curOpcode, TOSCache tosCache) {
-            int rhs = tosCache.popInt(expandedState.top, frame, -1);
-            int lhs = tosCache.popInt(expandedState.top, frame, -2);
+            int rhs = tosCache.peekInt(expandedState.top, frame, -1);
+            int lhs = tosCache.peekInt(expandedState.top, frame, -2);
             boolean branchTaken = takeBranchPrimitive2(rhs, lhs, curOpcode);
             profileBranch(state.methodProfile, curBCI, branchTaken);
+            tosCache.tosLevel = 0;
             if (branchTaken) {
                 expandedState.top += Bytecodes.stackEffectOf(curOpcode);
                 return finishJump(curBCI, BytecodeStream.uncheckedReadBranchDest2(state.code, curBCI), expandedState, state, frame, tosCache);
@@ -2935,6 +3260,7 @@ public final class Interpreter {
             return primitive2Branch(curBCI, expandedState, state, frame, IF_ICMPLE, tosCache);
         }
 
+        @ForceInline
         @AlwaysInline("Fold reference branch opcode in individual handlers")
         private static long ref2Branch(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, int curOpcode, TOSCache tosCache) {
             Object rhs = tosCache.popObject(expandedState.top, frame, -1);
@@ -2960,6 +3286,7 @@ public final class Interpreter {
             return ref2Branch(curBCI, expandedState, state, frame, IF_ACMPNE, tosCache);
         }
 
+        @ForceInline
         @AlwaysInline("Fold null branch opcode in individual handlers")
         private static long ref1Branch(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, int curOpcode, TOSCache tosCache) {
             boolean branchTaken = takeBranchRef1(tosCache.popObject(expandedState.top, frame, -1), curOpcode);
@@ -2983,6 +3310,7 @@ public final class Interpreter {
             return ref1Branch(curBCI, expandedState, state, frame, IFNONNULL, tosCache);
         }
 
+        @ForceInline
         @AlwaysInline("Fold jump width in individual handlers")
         private static long gotoBytecode(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, int curOpcode, TOSCache tosCache) {
             long targetBCI = curOpcode == GOTO ? BytecodeStream.uncheckedReadBranchDest2(state.code, curBCI) : BytecodeStream.uncheckedReadBranchDest4(state.code, curBCI);
@@ -3001,6 +3329,7 @@ public final class Interpreter {
             return gotoBytecode(curBCI, expandedState, state, frame, GOTO_W, tosCache);
         }
 
+        @ForceInline
         @AlwaysInline("Fold JSR width in individual handlers")
         private static long jsrBytecode(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, int curOpcode, TOSCache tosCache) {
             // JSR/JSR_W have an incorrect stack effect of 0 in the compiler sources.
@@ -3038,7 +3367,7 @@ public final class Interpreter {
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = TABLESWITCH, safepoint = false)
         private static long tableswitchHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            int index = tosCache.popInt(expandedState.top, frame, -1);
+            int index = tosCache.peekInt(expandedState.top, frame, -1);
             int low = TableSwitch.uncheckedLowKey(state.code, curBCI);
             int high = TableSwitch.uncheckedHighKey(state.code, curBCI);
             assert low <= high;
@@ -3049,6 +3378,11 @@ public final class Interpreter {
             } else {
                 targetBCI = TableSwitch.uncheckedDefaultTarget(state.code, curBCI);
             }
+            if (tosCache.tosLevel == 2) {
+                tosCache.tosLevel = 1;
+            } else {
+                tosCache.tosLevel = 0;
+            }
             expandedState.top += ConstantBytecodes.stackEffectOf(TABLESWITCH);
             return finishJump(curBCI, targetBCI, expandedState, state, frame, tosCache);
         }
@@ -3056,7 +3390,7 @@ public final class Interpreter {
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = LOOKUPSWITCH, safepoint = false)
         private static long lookupswitchHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            int key = tosCache.popInt(expandedState.top, frame, -1);
+            int key = tosCache.peekInt(expandedState.top, frame, -1);
             int low = 0;
             int high = LookupSwitch.uncheckedNumberOfCases(state.code, curBCI) - 1;
             while (low <= high) {
@@ -3067,11 +3401,21 @@ public final class Interpreter {
                 } else if (midVal > key) {
                     high = mid - 1;
                 } else {
+                    if (tosCache.tosLevel == 2) {
+                        tosCache.tosLevel = 1;
+                    } else {
+                        tosCache.tosLevel = 0;
+                    }
                     expandedState.top += ConstantBytecodes.stackEffectOf(LOOKUPSWITCH);
                     return finishJump(curBCI, curBCI + LookupSwitch.uncheckedOffsetAt(state.code, curBCI, mid), expandedState, state, frame, tosCache);
                 }
             }
 
+            if (tosCache.tosLevel == 2) {
+                tosCache.tosLevel = 1;
+            } else {
+                tosCache.tosLevel = 0;
+            }
             expandedState.top += ConstantBytecodes.stackEffectOf(LOOKUPSWITCH);
             return finishJump(curBCI, LookupSwitch.uncheckedDefaultTarget(state.code, curBCI), expandedState, state, frame, tosCache);
         }
@@ -3080,7 +3424,7 @@ public final class Interpreter {
         @BytecodeInterpreterHandler(value = GETSTATIC)
         private static long getstaticHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
             InterpreterResolvedJavaField resolvedJavaField = resolveField(state.method, GETSTATIC, state.code, curBCI);
-            expandedState.top += getStaticField(frame, tosCache.materializedTop(expandedState.top, frame), resolvedJavaField);
+            expandedState.top += getStaticField(frame, expandedState.top, resolvedJavaField, tosCache);
             return advanceToNextBytecode(curBCI, GETSTATIC, expandedState, state, frame, tosCache);
         }
 
@@ -3088,7 +3432,7 @@ public final class Interpreter {
         @BytecodeInterpreterHandler(value = GETFIELD)
         private static long getfieldHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
             InterpreterResolvedJavaField resolvedJavaField = resolveField(state.method, GETFIELD, state.code, curBCI);
-            expandedState.top += getInstanceField(frame, tosCache.materializedTop(expandedState.top, frame), resolvedJavaField);
+            expandedState.top += getInstanceField(frame, expandedState.top, resolvedJavaField, tosCache);
             return advanceToNextBytecode(curBCI, GETFIELD, expandedState, state, frame, tosCache);
         }
 
@@ -3096,7 +3440,7 @@ public final class Interpreter {
         @BytecodeInterpreterHandler(value = QUICK_GETSTATIC)
         private static long quickGetstaticHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
             InterpreterResolvedJavaField resolvedJavaField = resolveQuickenedField(state.method, GETSTATIC, BytecodeStream.uncheckedReadCPI2(state.code, curBCI));
-            expandedState.top += getStaticField(frame, tosCache.materializedTop(expandedState.top, frame), resolvedJavaField);
+            expandedState.top += getStaticField(frame, expandedState.top, resolvedJavaField, tosCache);
             return advanceToNextBytecode(curBCI, QUICK_GETSTATIC, expandedState, state, frame, tosCache);
         }
 
@@ -3104,7 +3448,7 @@ public final class Interpreter {
         @BytecodeInterpreterHandler(value = QUICK_GETFIELD)
         private static long quickGetfieldHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
             InterpreterResolvedJavaField resolvedJavaField = resolveQuickenedField(state.method, GETFIELD, BytecodeStream.uncheckedReadCPI2(state.code, curBCI));
-            expandedState.top += getInstanceField(frame, tosCache.materializedTop(expandedState.top, frame), resolvedJavaField);
+            expandedState.top += getInstanceField(frame, expandedState.top, resolvedJavaField, tosCache);
             return advanceToNextBytecode(curBCI, QUICK_GETFIELD, expandedState, state, frame, tosCache);
         }
 
@@ -3112,7 +3456,7 @@ public final class Interpreter {
         @BytecodeInterpreterHandler(value = PUTSTATIC)
         private static long putstaticHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
             InterpreterResolvedJavaField field = resolveField(state.method, PUTSTATIC, state.code, curBCI);
-            expandedState.top += putStaticField(frame, tosCache.materializedTop(expandedState.top, frame), field);
+            expandedState.top += putStaticField(frame, expandedState.top, field, tosCache);
             return advanceToNextBytecode(curBCI, PUTSTATIC, expandedState, state, frame, tosCache);
         }
 
@@ -3120,7 +3464,7 @@ public final class Interpreter {
         @BytecodeInterpreterHandler(value = PUTFIELD)
         private static long putfieldHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
             InterpreterResolvedJavaField field = resolveField(state.method, PUTFIELD, state.code, curBCI);
-            expandedState.top += putInstanceField(frame, tosCache.materializedTop(expandedState.top, frame), field);
+            expandedState.top += putInstanceField(frame, expandedState.top, field, tosCache);
             return advanceToNextBytecode(curBCI, PUTFIELD, expandedState, state, frame, tosCache);
         }
 
@@ -3128,7 +3472,7 @@ public final class Interpreter {
         @BytecodeInterpreterHandler(value = QUICK_PUTSTATIC)
         private static long quickPutstaticHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
             InterpreterResolvedJavaField field = resolveQuickenedField(state.method, PUTSTATIC, BytecodeStream.uncheckedReadCPI2(state.code, curBCI));
-            expandedState.top += putStaticField(frame, tosCache.materializedTop(expandedState.top, frame), field);
+            expandedState.top += putStaticField(frame, expandedState.top, field, tosCache);
             return advanceToNextBytecode(curBCI, QUICK_PUTSTATIC, expandedState, state, frame, tosCache);
         }
 
@@ -3136,10 +3480,11 @@ public final class Interpreter {
         @BytecodeInterpreterHandler(value = QUICK_PUTFIELD)
         private static long quickPutfieldHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
             InterpreterResolvedJavaField field = resolveQuickenedField(state.method, PUTFIELD, BytecodeStream.uncheckedReadCPI2(state.code, curBCI));
-            expandedState.top += putInstanceField(frame, tosCache.materializedTop(expandedState.top, frame), field);
+            expandedState.top += putInstanceField(frame, expandedState.top, field, tosCache);
             return advanceToNextBytecode(curBCI, QUICK_PUTFIELD, expandedState, state, frame, tosCache);
         }
 
+        @ForceInline
         @AlwaysInline("Fold invoke opcode in individual handlers")
         private static long invokeBytecode(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, int curOpcode, TOSCache tosCache) {
             boolean preferStayInInterpreter = state.forceStayInInterpreter;
@@ -3166,7 +3511,8 @@ public final class Interpreter {
             }
 
             try {
-                expandedState.top += invoke(frame, state.methodProfile, state.method, state.code, tosCache.materializedTop(expandedState.top, frame), (int) curBCI, curOpcode, state.forceStayInInterpreter,
+                expandedState.top += invoke(frame, state.methodProfile, state.method, state.code, tosCache.materializedTop(expandedState.top, frame), (int) curBCI, curOpcode,
+                                state.forceStayInInterpreter,
                                 preferStayInInterpreter);
             } finally {
                 if (debuggerEventsSupported()) {
@@ -3227,25 +3573,28 @@ public final class Interpreter {
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = NEWARRAY)
         private static long newarrayHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            int length = tosCache.popInt(expandedState.top, frame, -1);
-            putObject(frame, expandedState.top, -1, InterpreterToVM.createNewPrimitiveArray(BytecodeStream.uncheckedReadByte(state.code, curBCI), length));
+            int length = tosCache.peekInt(expandedState.top, frame, -1);
+            Object array = InterpreterToVM.createNewPrimitiveArray(BytecodeStream.uncheckedReadByte(state.code, curBCI), length);
+            tosCache.replaceTopWithObject(expandedState.top, frame, 1, array);
             return advanceToNextBytecode(curBCI, NEWARRAY, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = ANEWARRAY)
         private static long anewarrayHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            int length = tosCache.popInt(expandedState.top, frame, -1);
-            putObject(frame, expandedState.top, -1,
-                            InterpreterToVM.createNewReferenceArray(resolveType(state.method, ANEWARRAY, BytecodeStream.uncheckedReadCPI2(state.code, curBCI)), length));
+            int length = tosCache.peekInt(expandedState.top, frame, -1);
+            Object array = InterpreterToVM.createNewReferenceArray(resolveType(state.method, ANEWARRAY, BytecodeStream.uncheckedReadCPI2(state.code, curBCI)), length);
+            tosCache.replaceTopWithObject(expandedState.top, frame, 1, array);
             return advanceToNextBytecode(curBCI, ANEWARRAY, expandedState, state, frame, tosCache);
         }
 
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = ARRAYLENGTH, safepoint = false)
         private static long arraylengthHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            Object array = nullCheck(tosCache.popObject(expandedState.top, frame, -1));
-            putInt(frame, expandedState.top, -1, InterpreterToVM.arrayLength(array));
+            Object array = nullCheck(tosCache.peekObjectAtOffset(expandedState.top, frame, -1));
+            int length = InterpreterToVM.arrayLength(array);
+            clearReference(frame, expandedState.top, -1);
+            tosCache.replaceTopWithInt(1, length);
             return advanceToNextBytecode(curBCI, ARRAYLENGTH, expandedState, state, frame, tosCache);
         }
 
@@ -3271,20 +3620,28 @@ public final class Interpreter {
         @NeverInlineTrivial(reason = "BytecodeInterpreterHandler")
         @BytecodeInterpreterHandler(value = INSTANCEOF)
         private static long instanceofHandler(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            Object receiver = tosCache.popObject(expandedState.top, frame, -1);
+            Object receiver = tosCache.peekObjectAtOffset(expandedState.top, frame, -1);
             profileType(state.methodProfile, curBCI, receiver);
-            putInt(frame, expandedState.top, -1,
-                            (receiver != null && InterpreterToVM.instanceOf(receiver, resolveType(state.method, INSTANCEOF, BytecodeStream.uncheckedReadCPI2(state.code, curBCI)))) ? 1 : 0);
+            int result = (receiver != null && InterpreterToVM.instanceOf(receiver, resolveType(state.method, INSTANCEOF, BytecodeStream.uncheckedReadCPI2(state.code, curBCI)))) ? 1 : 0;
+            clearReference(frame, expandedState.top, -1);
+            tosCache.replaceTopWithInt(1, result);
             return advanceToNextBytecode(curBCI, INSTANCEOF, expandedState, state, frame, tosCache);
         }
 
+        @ForceInline
         @AlwaysInline("Fold monitor opcode in individual handlers")
         private static long monitorBytecode(long curBCI, ExpandedState expandedState, State state, InterpreterFrame frame, int curOpcode, TOSCache tosCache) {
-            Object receiver = nullCheck(tosCache.popObject(expandedState.top, frame, -1));
+            Object receiver = nullCheck(tosCache.peekObjectAtOffset(expandedState.top, frame, -1));
             if (curOpcode == MONITORENTER) {
                 InterpreterToVM.monitorEnter(frame, receiver);
             } else {
                 InterpreterToVM.monitorExit(frame, receiver);
+            }
+            clearReference(frame, expandedState.top, -1);
+            if (tosCache.tosLevel == 2) {
+                tosCache.tosLevel = 1;
+            } else {
+                tosCache.tosLevel = 0;
             }
             return advanceToNextBytecode(curBCI, curOpcode, expandedState, state, frame, tosCache);
         }
@@ -3312,9 +3669,23 @@ public final class Interpreter {
                 case DLOAD -> tosCache.pushDouble(expandedState.top, frame, getLocalDouble(frame, BytecodeStream.uncheckedReadLocalIndex2(state.code, curBCI)));
                 case ALOAD -> tosCache.pushObject(expandedState.top, frame, getLocalObject(frame, BytecodeStream.uncheckedReadLocalIndex2(state.code, curBCI)));
 
-                case ISTORE -> setLocalInt(frame, BytecodeStream.uncheckedReadLocalIndex2(state.code, curBCI), tosCache.popInt(expandedState.top, frame, -1));
+                case ISTORE -> {
+                    setLocalInt(frame, BytecodeStream.uncheckedReadLocalIndex2(state.code, curBCI), tosCache.peekInt(expandedState.top, frame, -1));
+                    if (tosCache.tosLevel == 2) {
+                        tosCache.tosLevel = 1;
+                    } else {
+                        tosCache.tosLevel = 0;
+                    }
+                }
                 case LSTORE -> setLocalLong(frame, BytecodeStream.uncheckedReadLocalIndex2(state.code, curBCI), tosCache.popLong(expandedState.top, frame, -1));
-                case FSTORE -> setLocalFloat(frame, BytecodeStream.uncheckedReadLocalIndex2(state.code, curBCI), tosCache.popFloat(expandedState.top, frame, -1));
+                case FSTORE -> {
+                    setLocalFloat(frame, BytecodeStream.uncheckedReadLocalIndex2(state.code, curBCI), tosCache.peekFloat(expandedState.top, frame, -1));
+                    if (tosCache.tosLevel == 2) {
+                        tosCache.tosLevel = 1;
+                    } else {
+                        tosCache.tosLevel = 0;
+                    }
+                }
                 case DSTORE -> setLocalDouble(frame, BytecodeStream.uncheckedReadLocalIndex2(state.code, curBCI), tosCache.popDouble(expandedState.top, frame, -1));
                 case ASTORE -> setLocalObjectOrReturnAddress(frame, BytecodeStream.uncheckedReadLocalIndex2(state.code, curBCI), tosCache.popReturnAddressOrObject(expandedState.top, frame, -1));
                 case IINC -> setLocalInt(frame, BytecodeStream.uncheckedReadLocalIndex2(state.code, curBCI),
@@ -3346,9 +3717,10 @@ public final class Interpreter {
          *
          * @return the checked target BCI
          */
+        @ForceInline
         @AlwaysInline("Keep branch completion on the fast path")
         private static long finishJump(long curBCI, long targetBCI, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
-            long nextBCI = beforeJumpChecks(state.methodProfile, state.method, frame, state.forceStayInInterpreter, curBCI, targetBCI, tosCache.materializedTop(expandedState.top, frame));
+            long nextBCI = beforeJumpChecks(state.methodProfile, state.method, frame, state.forceStayInInterpreter, curBCI, targetBCI, expandedState.top, tosCache);
             prepareOpcodeForDispatch(nextBCI, expandedState, state, frame, tosCache);
             return nextBCI;
         }
@@ -3366,6 +3738,7 @@ public final class Interpreter {
          *
          * @return the BCI of the prepared successor bytecode
          */
+        @ForceInline
         @AlwaysInline("Keep common opcode completion on the fast path")
         private static long advanceToNextBytecode(long curBCI, int curOpcode, ExpandedState expandedState, State state, InterpreterFrame frame, TOSCache tosCache) {
             expandedState.top += Bytecodes.stackEffectOf(curOpcode);
@@ -3395,20 +3768,22 @@ public final class Interpreter {
         throw (T) e;
     }
 
-    private static Object getReturnValueAsObject(InterpreterFrame frame, InterpreterResolvedJavaMethod method, long top) {
+    @ForceInline
+    @AlwaysInline("Keep cached return values in the interpreter root")
+    private static Object getReturnValueAsObject(InterpreterFrame frame, InterpreterResolvedJavaMethod method, long top, Root.TOSCache tosCache) {
         JavaKind returnType = method.getSignature().getReturnKind();
         // @formatter:off
         return switch (returnType) {
-            case Boolean -> stackIntToBoolean(popInt(frame, top, -1));
-            case Byte    -> (byte) popInt(frame, top, -1);
-            case Short   -> (short) popInt(frame, top, -1);
-            case Char    -> (char) popInt(frame, top, -1);
-            case Int     -> popInt(frame, top, -1);
-            case Long    -> popLong(frame, top, -1);
-            case Float   -> popFloat(frame, top, -1);
-            case Double  -> popDouble(frame, top, -1);
+            case Boolean -> stackIntToBoolean(tosCache.peekInt(top, frame, -1));
+            case Byte    -> (byte) tosCache.peekInt(top, frame, -1);
+            case Short   -> (short) tosCache.peekInt(top, frame, -1);
+            case Char    -> (char) tosCache.peekInt(top, frame, -1);
+            case Int     -> tosCache.peekInt(top, frame, -1);
+            case Long    -> tosCache.peekLong(top, frame, -1);
+            case Float   -> tosCache.peekFloat(top, frame, -1);
+            case Double  -> tosCache.peekDouble(top, frame, -1);
             case Void    -> null; // void
-            case Object  -> popObject(frame, top, -1);
+            case Object  -> tosCache.peekObjectAtOffset(top, frame, -1);
             default      -> throw VMError.shouldNotReachHereAtRuntime();
         };
         // @formatter:on
@@ -3419,6 +3794,13 @@ public final class Interpreter {
         for (long slot = top - 1; slot >= stackStart; --slot) {
             clear(frame, slot);
         }
+    }
+
+    @ForceInline
+    @AlwaysInline("Clear cached and materialized operand slots together")
+    private static void clearOperandStack(InterpreterFrame frame, InterpreterResolvedJavaMethod method, long top, Root.TOSCache tosCache) {
+        tosCache.clear();
+        clearOperandStack(frame, method, top);
     }
 
     private static boolean takeBranchRef1(Object operand, int opcode) {
@@ -3465,87 +3847,117 @@ public final class Interpreter {
         };
     }
 
+    @ForceInline
     @AlwaysInline("Fold byte array load")
-    private static void byteArrayLoad(InterpreterFrame frame, long top) {
-        Object array = nullCheck(popObject(frame, top, -2));
+    private static void byteArrayLoad(InterpreterFrame frame, long top, Root.TOSCache tosCache) {
+        Object array = nullCheck(tosCache.peekObjectAtOffset(top, frame, -2));
         /* The opaque branch-local top keeps the index read below the array hub checks. */
         if (array instanceof byte[] byteArray) {
             long branchTop = GraalDirectives.opaque(top);
-            int index = popInt(frame, branchTop, -1);
-            putInt(frame, top, -2, InterpreterToVM.getArrayByteInternal(index, byteArray));
+            int index = tosCache.peekInt(branchTop, frame, -1);
+            int value = InterpreterToVM.getArrayByteInternal(index, byteArray);
+            clearReference(frame, top, -2);
+            tosCache.replaceTopWithInt(2, value);
         } else {
             boolean[] booleanArray = (boolean[]) array;
             long branchTop = GraalDirectives.opaque(top);
-            int index = popInt(frame, branchTop, -1);
-            putInt(frame, top, -2, InterpreterToVM.getArrayBooleanInternal(index, booleanArray));
+            int index = tosCache.peekInt(branchTop, frame, -1);
+            int value = InterpreterToVM.getArrayBooleanInternal(index, booleanArray);
+            clearReference(frame, top, -2);
+            tosCache.replaceTopWithInt(2, value);
         }
     }
 
+    @ForceInline
     @AlwaysInline("Fold object array load")
-    private static void objectArrayLoad(InterpreterFrame frame, MethodProfile methodProfile, long bci, long top) {
-        Object array = nullCheck(popObject(frame, top, -2));
-        int index = popInt(frame, top, -1);
+    private static void objectArrayLoad(InterpreterFrame frame, MethodProfile methodProfile, long bci, long top, Root.TOSCache tosCache) {
+        Object array = nullCheck(tosCache.peekObjectAtOffset(top, frame, -2));
+        int index = tosCache.peekInt(top, frame, -1);
         Object o = InterpreterToVM.getArrayObject(index, uncheckedCast(array, Object[].class));
         profileType(methodProfile, bci, o);
-        putObject(frame, top, -2, o);
+        tosCache.replaceTopWithObject(top, frame, 2, o);
     }
 
+    @ForceInline
     @AlwaysInline("Fold array load opcode in individual handlers")
-    private static void arrayLoad(InterpreterFrame frame, long top, int loadOpcode) {
-        Object array = nullCheck(popObject(frame, top, -2));
-        int index = popInt(frame, top, -1);
+    private static void arrayLoad(InterpreterFrame frame, long top, int loadOpcode, Root.TOSCache tosCache) {
+        Object array = nullCheck(tosCache.peekObjectAtOffset(top, frame, -2));
+        int index = tosCache.peekInt(top, frame, -1);
         switch (loadOpcode) {
-            case SALOAD -> putInt(frame, top, -2, InterpreterToVM.getArrayShort(index, uncheckedCast(array, short[].class)));
-            case CALOAD -> putInt(frame, top, -2, InterpreterToVM.getArrayChar(index, uncheckedCast(array, char[].class)));
-            case IALOAD -> putInt(frame, top, -2, InterpreterToVM.getArrayInt(index, uncheckedCast(array, int[].class)));
-            case FALOAD -> putFloat(frame, top, -2, InterpreterToVM.getArrayFloat(index, uncheckedCast(array, float[].class)));
-            case LALOAD -> putLong(frame, top, -2, InterpreterToVM.getArrayLong(index, uncheckedCast(array, long[].class)));
-            case DALOAD -> putDouble(frame, top, -2, InterpreterToVM.getArrayDouble(index, uncheckedCast(array, double[].class)));
+            case SALOAD -> {
+                int value = InterpreterToVM.getArrayShort(index, uncheckedCast(array, short[].class));
+                tosCache.replaceTopWithInt(2, value);
+            }
+            case CALOAD -> {
+                int value = InterpreterToVM.getArrayChar(index, uncheckedCast(array, char[].class));
+                tosCache.replaceTopWithInt(2, value);
+            }
+            case IALOAD -> {
+                int value = InterpreterToVM.getArrayInt(index, uncheckedCast(array, int[].class));
+                tosCache.replaceTopWithInt(2, value);
+            }
+            case FALOAD -> {
+                float value = InterpreterToVM.getArrayFloat(index, uncheckedCast(array, float[].class));
+                tosCache.replaceTopWithFloat(2, value);
+            }
+            case LALOAD -> tosCache.replaceTopWithLong(top, frame, 2, InterpreterToVM.getArrayLong(index, uncheckedCast(array, long[].class)));
+            case DALOAD -> tosCache.replaceTopWithDouble(top, frame, 2, InterpreterToVM.getArrayDouble(index, uncheckedCast(array, double[].class)));
             default -> throw InterpreterUtil.invalidOpcode(loadOpcode);
         }
+        clearReference(frame, top, -2);
     }
 
+    @ForceInline
     @AlwaysInline("Fold byte array store")
-    private static void byteArrayStore(InterpreterFrame frame, long top) {
-        Object array = nullCheck(popObject(frame, top, -3));
+    private static void byteArrayStore(InterpreterFrame frame, long top, Root.TOSCache tosCache) {
+        Object array = nullCheck(tosCache.peekObjectAtOffset(top, frame, -3));
         /* The opaque branch-local tops keep stack reads below the checks that precede them. */
         if (array instanceof byte[] byteArray) {
             long opaqueTop = GraalDirectives.opaque(top);
-            int index = popInt(frame, opaqueTop, -2);
-            byte value = (byte) popInt(frame, opaqueTop, -1);
+            int index = tosCache.peekInt(opaqueTop, frame, -2);
+            byte value = (byte) tosCache.peekInt(opaqueTop, frame, -1);
             InterpreterToVM.setArrayByteInternal(value, index, byteArray);
         } else {
             boolean[] booleanArray = (boolean[]) array;
             long opaqueTop = GraalDirectives.opaque(top);
-            int index = popInt(frame, opaqueTop, -2);
-            byte value = (byte) popInt(frame, opaqueTop, -1);
+            int index = tosCache.peekInt(opaqueTop, frame, -2);
+            byte value = (byte) tosCache.peekInt(opaqueTop, frame, -1);
             InterpreterToVM.setArrayBooleanInternal(value, index, booleanArray);
         }
+        clearReference(frame, top, -3);
+        tosCache.tosLevel = 0;
     }
 
+    @ForceInline
     @AlwaysInline("Fold object array store")
-    private static void objectArrayStore(InterpreterFrame frame, MethodProfile methodProfile, long bci, long top) {
-        Object array = nullCheck(popObject(frame, top, -3));
-        int index = popInt(frame, top, -2);
-        Object o = popObject(frame, top, -1);
+    private static void objectArrayStore(InterpreterFrame frame, MethodProfile methodProfile, long bci, long top, Root.TOSCache tosCache) {
+        Object array = nullCheck(tosCache.peekObjectAtOffset(top, frame, -3));
+        int index = tosCache.peekInt(top, frame, -2);
+        Object o = tosCache.peekObjectAtOffset(top, frame, -1);
         profileType(methodProfile, bci, o);
         InterpreterToVM.setArrayObject(o, index, uncheckedCast(array, Object[].class));
+        clearReference(frame, top, -3);
+        clearReference(frame, top, -1);
+        tosCache.tosLevel = 0;
     }
 
+    @ForceInline
     @AlwaysInline("Fold array store opcode in individual handlers")
-    private static void arrayStore(InterpreterFrame frame, long top, int storeOpcode) {
+    private static void arrayStore(InterpreterFrame frame, long top, int storeOpcode, Root.TOSCache tosCache) {
         int offset = (storeOpcode == LASTORE || storeOpcode == DASTORE) ? 2 : 1;
-        Object array = nullCheck(popObject(frame, top, -2 - offset));
-        int index = popInt(frame, top, -1 - offset);
+        Object array = nullCheck(tosCache.peekObjectAtOffset(top, frame, -2 - offset));
+        int index = tosCache.peekInt(top, frame, -1 - offset);
         switch (storeOpcode) {
-            case SASTORE -> InterpreterToVM.setArrayShort((short) popInt(frame, top, -1), index, uncheckedCast(array, short[].class));
-            case CASTORE -> InterpreterToVM.setArrayChar((char) popInt(frame, top, -1), index, uncheckedCast(array, char[].class));
-            case IASTORE -> InterpreterToVM.setArrayInt(popInt(frame, top, -1), index, uncheckedCast(array, int[].class));
-            case FASTORE -> InterpreterToVM.setArrayFloat(popFloat(frame, top, -1), index, uncheckedCast(array, float[].class));
+            case SASTORE -> InterpreterToVM.setArrayShort((short) tosCache.peekInt(top, frame, -1), index, uncheckedCast(array, short[].class));
+            case CASTORE -> InterpreterToVM.setArrayChar((char) tosCache.peekInt(top, frame, -1), index, uncheckedCast(array, char[].class));
+            case IASTORE -> InterpreterToVM.setArrayInt(tosCache.peekInt(top, frame, -1), index, uncheckedCast(array, int[].class));
+            case FASTORE -> InterpreterToVM.setArrayFloat(tosCache.peekFloat(top, frame, -1), index, uncheckedCast(array, float[].class));
             case LASTORE -> InterpreterToVM.setArrayLong(popLong(frame, top, -1), index, uncheckedCast(array, long[].class));
             case DASTORE -> InterpreterToVM.setArrayDouble(popDouble(frame, top, -1), index, uncheckedCast(array, double[].class));
             default -> throw VMError.shouldNotReachHereAtRuntime();
         }
+        clearReference(frame, top, -2 - offset);
+        tosCache.tosLevel = 0;
     }
 
     /**
@@ -3563,12 +3975,14 @@ public final class Interpreter {
      * in the interpreter.
      */
     @SuppressWarnings("unused")
+    @ForceInline
     private static long beforeJumpChecks(MethodProfile methodProfile, InterpreterResolvedJavaMethod method, InterpreterFrame frame, boolean forceStayInInterpreter, long curBCI, long targetBCI,
-                    long top) {
+                    long top, Root.TOSCache tosCache) {
         if (targetBCI <= curBCI) {
             GraalDirectives.safepoint();
             if (SubstrateOptions.useRistretto() && !forceStayInInterpreter) {
-                OSRResult result = RistrettoOSRSupport.tryOSR(method, methodProfile, frame, (int) targetBCI, (int) top);
+                long materializedTop = tosCache.materializedTop(top, frame);
+                OSRResult result = RistrettoOSRSupport.tryOSR(method, methodProfile, frame, (int) targetBCI, (int) materializedTop);
                 if (result != null) {
                     if (result.exception() != null) {
                         throw new OSRException(result.exception());
@@ -3671,7 +4085,7 @@ public final class Interpreter {
     }
 
     public static int beforeJumpChecks(InterpreterFrame frame, int curBCI, int targetBCI, long top) {
-        return (int) beforeJumpChecks(null, null, frame, true, curBCI, targetBCI, top);
+        return (int) beforeJumpChecks(null, null, frame, true, curBCI, targetBCI, top, null);
     }
 
     public static ExceptionHandler resolveExceptionHandler(InterpreterResolvedJavaMethod method, int bci, Throwable ex) {
@@ -3727,6 +4141,8 @@ public final class Interpreter {
         throw SemanticJavaException.raiseInlined(new IncompatibleClassChangeError(message));
     }
 
+    @ForceInline
+    @AlwaysInline("Keep resolved constant fast paths in bytecode-handler stubs")
     private static void loadConstant(InterpreterFrame frame, Root.State state, Root.ExpandedState expandedState, int cpi, int opcode, Root.TOSCache tosCache) {
         assert opcode == LDC || opcode == LDC_W;
         InterpreterConstantPool pool = getConstantPool(state.method);
@@ -3744,6 +4160,8 @@ public final class Interpreter {
         resolveConstantAtSlowPath(frame, state, tosCache.materializedTop(expandedState.top, frame), cpi, opcode, pool);
     }
 
+    @ForceInline
+    @AlwaysInline("Keep resolved constant fast paths in bytecode-handler stubs")
     private static void loadConstant2(InterpreterFrame frame, Root.State state, Root.ExpandedState expandedState, int cpi, Root.TOSCache tosCache) {
         VMError.guarantee(cpi != 0);
         InterpreterConstantPool pool = getConstantPool(state.method);
@@ -3820,6 +4238,7 @@ public final class Interpreter {
         return method.getConstantPool();
     }
 
+    @NeverInline("Keep stack-consuming invocation out of bytecode-handler stubs")
     private static int invoke(InterpreterFrame callerFrame, MethodProfile methodProfile, InterpreterResolvedJavaMethod method, byte[] code, long top, int curBCI, int opcode,
                     boolean forceStayInInterpreter,
                     boolean preferStayInInterpreter) {
@@ -4309,7 +4728,9 @@ public final class Interpreter {
      * @return the additional stack adjustment for the field value beyond the minimum bytecode
      * stack effect: zero for a category-1 value and minus one for a category-2 value
      */
-    private static int putStaticField(InterpreterFrame frame, long top, InterpreterResolvedJavaField field) {
+    @ForceInline
+    @AlwaysInline("Keep stack access in the bytecode-handler stub")
+    private static int putStaticField(InterpreterFrame frame, long top, InterpreterResolvedJavaField field, Root.TOSCache tosCache) {
         assert field.isStatic();
         assert !field.isUnmaterializedConstant();
         InterpreterToVM.ensureClassInitialized(field.getDeclaringClass());
@@ -4317,8 +4738,83 @@ public final class Interpreter {
         JavaKind kind = field.getJavaKind();
         Object receiver = field.getDeclaringClass().getStaticStorage(kind.isPrimitive(), field.getInstalledLayerNum());
 
-        putFieldImpl(frame, top, field, kind, receiver);
-        return -kind.getSlotCount() + 1;
+        return switch (kind) {
+            case Boolean -> {
+                InterpreterToVM.setFieldBoolean(stackIntToBoolean(tosCache.peekInt(top, frame, -1)), receiver, field, true);
+                if (tosCache.tosLevel == 2) {
+                    tosCache.tosLevel = 1;
+                } else {
+                    tosCache.tosLevel = 0;
+                }
+                yield 0;
+            }
+            case Byte -> {
+                InterpreterToVM.setFieldByte((byte) tosCache.peekInt(top, frame, -1), receiver, field, true);
+                if (tosCache.tosLevel == 2) {
+                    tosCache.tosLevel = 1;
+                } else {
+                    tosCache.tosLevel = 0;
+                }
+                yield 0;
+            }
+            case Char -> {
+                InterpreterToVM.setFieldChar((char) tosCache.peekInt(top, frame, -1), receiver, field, true);
+                if (tosCache.tosLevel == 2) {
+                    tosCache.tosLevel = 1;
+                } else {
+                    tosCache.tosLevel = 0;
+                }
+                yield 0;
+            }
+            case Short -> {
+                InterpreterToVM.setFieldShort((short) tosCache.peekInt(top, frame, -1), receiver, field, true);
+                if (tosCache.tosLevel == 2) {
+                    tosCache.tosLevel = 1;
+                } else {
+                    tosCache.tosLevel = 0;
+                }
+                yield 0;
+            }
+            case Int -> {
+                InterpreterToVM.setFieldInt(tosCache.peekInt(top, frame, -1), receiver, field, true);
+                if (tosCache.tosLevel == 2) {
+                    tosCache.tosLevel = 1;
+                } else {
+                    tosCache.tosLevel = 0;
+                }
+                yield 0;
+            }
+            case Double -> {
+                InterpreterToVM.setFieldDouble(tosCache.peekDouble(top, frame, -1), receiver, field, true);
+                tosCache.tosLevel = 0;
+                yield -1;
+            }
+            case Float -> {
+                InterpreterToVM.setFieldFloat(tosCache.peekFloat(top, frame, -1), receiver, field, true);
+                if (tosCache.tosLevel == 2) {
+                    tosCache.tosLevel = 1;
+                } else {
+                    tosCache.tosLevel = 0;
+                }
+                yield 0;
+            }
+            case Long -> {
+                InterpreterToVM.setFieldLong(tosCache.peekLong(top, frame, -1), receiver, field, true);
+                tosCache.tosLevel = 0;
+                yield -1;
+            }
+            case Object -> {
+                InterpreterToVM.setFieldObject(tosCache.peekObjectAtOffset(top, frame, -1), receiver, field, true);
+                if (tosCache.tosLevel == 2) {
+                    tosCache.tosLevel = 1;
+                } else {
+                    tosCache.tosLevel = 0;
+                }
+                clearReference(frame, top, -1);
+                yield 0;
+            }
+            default -> throw InterpreterUtil.shouldNotReachHereAtRuntime();
+        };
     }
 
     /**
@@ -4329,33 +4825,80 @@ public final class Interpreter {
      * @return the additional stack adjustment for the field value beyond the minimum bytecode
      * stack effect: zero for a category-1 value and minus one for a category-2 value
      */
-    private static int putInstanceField(InterpreterFrame frame, long top, InterpreterResolvedJavaField field) {
+    @ForceInline
+    @AlwaysInline("Keep stack access in the bytecode-handler stub")
+    private static int putInstanceField(InterpreterFrame frame, long top, InterpreterResolvedJavaField field, Root.TOSCache tosCache) {
         assert !field.isStatic();
         assert !field.isUnmaterializedConstant();
 
         JavaKind kind = field.getJavaKind();
-        int slotCount = kind.getSlotCount();
-        Object receiver = nullCheck(popObject(frame, top - slotCount - 1));
-
-        putFieldImpl(frame, top, field, kind, receiver);
-        return -slotCount + 1;
-    }
-
-    private static void putFieldImpl(InterpreterFrame frame, long top, InterpreterResolvedJavaField field, JavaKind kind, Object receiver) {
-        // @formatter:off
-        switch (kind) {
-            case Boolean -> InterpreterToVM.setFieldBoolean(stackIntToBoolean(popInt(frame, top, -1)), receiver, field, true);
-            case Byte    -> InterpreterToVM.setFieldByte((byte) popInt(frame, top, -1), receiver, field, true);
-            case Char    -> InterpreterToVM.setFieldChar((char) popInt(frame, top, -1), receiver, field, true);
-            case Short   -> InterpreterToVM.setFieldShort((short) popInt(frame, top, -1), receiver, field, true);
-            case Int     -> InterpreterToVM.setFieldInt(popInt(frame, top, -1), receiver, field, true);
-            case Double  -> InterpreterToVM.setFieldDouble(popDouble(frame, top, -1), receiver, field, true);
-            case Float   -> InterpreterToVM.setFieldFloat(popFloat(frame, top, -1), receiver, field, true);
-            case Long    -> InterpreterToVM.setFieldLong(popLong(frame, top, -1), receiver, field, true);
-            case Object  -> InterpreterToVM.setFieldObject(popObject(frame, top, -1), receiver, field, true);
-            default      -> throw InterpreterUtil.shouldNotReachHereAtRuntime();
-        }
-        // @formatter:on
+        return switch (kind) {
+            case Boolean -> {
+                Object receiver = nullCheck(tosCache.peekObjectAtOffset(top, frame, -2));
+                InterpreterToVM.setFieldBoolean(stackIntToBoolean(tosCache.peekInt(top, frame, -1)), receiver, field, true);
+                tosCache.tosLevel = 0;
+                clearReference(frame, top, -2);
+                yield 0;
+            }
+            case Byte -> {
+                Object receiver = nullCheck(tosCache.peekObjectAtOffset(top, frame, -2));
+                InterpreterToVM.setFieldByte((byte) tosCache.peekInt(top, frame, -1), receiver, field, true);
+                tosCache.tosLevel = 0;
+                clearReference(frame, top, -2);
+                yield 0;
+            }
+            case Char -> {
+                Object receiver = nullCheck(tosCache.peekObjectAtOffset(top, frame, -2));
+                InterpreterToVM.setFieldChar((char) tosCache.peekInt(top, frame, -1), receiver, field, true);
+                tosCache.tosLevel = 0;
+                clearReference(frame, top, -2);
+                yield 0;
+            }
+            case Short -> {
+                Object receiver = nullCheck(tosCache.peekObjectAtOffset(top, frame, -2));
+                InterpreterToVM.setFieldShort((short) tosCache.peekInt(top, frame, -1), receiver, field, true);
+                tosCache.tosLevel = 0;
+                clearReference(frame, top, -2);
+                yield 0;
+            }
+            case Int -> {
+                Object receiver = nullCheck(tosCache.peekObjectAtOffset(top, frame, -2));
+                InterpreterToVM.setFieldInt(tosCache.peekInt(top, frame, -1), receiver, field, true);
+                tosCache.tosLevel = 0;
+                clearReference(frame, top, -2);
+                yield 0;
+            }
+            case Double -> {
+                Object receiver = nullCheck(tosCache.peekObjectAtOffset(top, frame, -3));
+                InterpreterToVM.setFieldDouble(tosCache.peekDouble(top, frame, -1), receiver, field, true);
+                tosCache.tosLevel = 0;
+                clearReference(frame, top, -3);
+                yield -1;
+            }
+            case Float -> {
+                Object receiver = nullCheck(tosCache.peekObjectAtOffset(top, frame, -2));
+                InterpreterToVM.setFieldFloat(tosCache.peekFloat(top, frame, -1), receiver, field, true);
+                tosCache.tosLevel = 0;
+                clearReference(frame, top, -2);
+                yield 0;
+            }
+            case Long -> {
+                Object receiver = nullCheck(tosCache.peekObjectAtOffset(top, frame, -3));
+                InterpreterToVM.setFieldLong(tosCache.peekLong(top, frame, -1), receiver, field, true);
+                tosCache.tosLevel = 0;
+                clearReference(frame, top, -3);
+                yield -1;
+            }
+            case Object -> {
+                Object receiver = nullCheck(tosCache.peekObjectAtOffset(top, frame, -2));
+                InterpreterToVM.setFieldObject(tosCache.peekObjectAtOffset(top, frame, -1), receiver, field, true);
+                tosCache.tosLevel = 0;
+                clearReference(frame, top, -2);
+                clearReference(frame, top, -1);
+                yield 0;
+            }
+            default -> throw InterpreterUtil.shouldNotReachHereAtRuntime();
+        };
     }
 
     /**
@@ -4365,7 +4908,9 @@ public final class Interpreter {
      * @return the additional stack adjustment for the field value beyond the minimum bytecode
      *         stack effect: zero for a category-1 value and one for a category-2 value
      */
-    private static int getStaticField(InterpreterFrame frame, long top, InterpreterResolvedJavaField field) {
+    @ForceInline
+    @AlwaysInline("Keep stack access in the bytecode-handler stub")
+    private static int getStaticField(InterpreterFrame frame, long top, InterpreterResolvedJavaField field, Root.TOSCache tosCache) {
         assert field.isStatic();
         InterpreterToVM.ensureClassInitialized(field.getDeclaringClass());
 
@@ -4374,15 +4919,15 @@ public final class Interpreter {
 
         // @formatter:off
         switch (kind) {
-            case Boolean -> putInt(frame, top, InterpreterToVM.getFieldBoolean(receiver, field, true) ? 1 : 0);
-            case Byte    -> putInt(frame, top, InterpreterToVM.getFieldByte(receiver, field, true));
-            case Char    -> putInt(frame, top, InterpreterToVM.getFieldChar(receiver, field, true));
-            case Short   -> putInt(frame, top, InterpreterToVM.getFieldShort(receiver, field, true));
-            case Int     -> putInt(frame, top, InterpreterToVM.getFieldInt(receiver, field, true));
-            case Double  -> putDouble(frame, top, InterpreterToVM.getFieldDouble(receiver, field, true));
-            case Float   -> putFloat(frame, top, InterpreterToVM.getFieldFloat(receiver, field, true));
-            case Long    -> putLong(frame, top, InterpreterToVM.getFieldLong(receiver, field, true));
-            case Object  -> putObject(frame, top, InterpreterToVM.getFieldObject(receiver, field, true));
+            case Boolean -> tosCache.pushInt(top, frame, InterpreterToVM.getFieldBoolean(receiver, field, true) ? 1 : 0);
+            case Byte    -> tosCache.pushInt(top, frame, InterpreterToVM.getFieldByte(receiver, field, true));
+            case Char    -> tosCache.pushInt(top, frame, InterpreterToVM.getFieldChar(receiver, field, true));
+            case Short   -> tosCache.pushInt(top, frame, InterpreterToVM.getFieldShort(receiver, field, true));
+            case Int     -> tosCache.pushInt(top, frame, InterpreterToVM.getFieldInt(receiver, field, true));
+            case Double  -> tosCache.pushDouble(top, frame, InterpreterToVM.getFieldDouble(receiver, field, true));
+            case Float   -> tosCache.pushFloat(top, frame, InterpreterToVM.getFieldFloat(receiver, field, true));
+            case Long    -> tosCache.pushLong(top, frame, InterpreterToVM.getFieldLong(receiver, field, true));
+            case Object  -> tosCache.pushObject(top, frame, InterpreterToVM.getFieldObject(receiver, field, true));
             default      -> throw InterpreterUtil.shouldNotReachHereAtRuntime();
         }
         // @formatter:on
@@ -4397,23 +4942,49 @@ public final class Interpreter {
      * @return the additional stack adjustment for the field value beyond the minimum bytecode
      *         stack effect: zero for a category-1 value and one for a category-2 value
      */
-    private static int getInstanceField(InterpreterFrame frame, long top, InterpreterResolvedJavaField field) {
+    @ForceInline
+    @AlwaysInline("Keep stack access in the bytecode-handler stub")
+    private static int getInstanceField(InterpreterFrame frame, long top, InterpreterResolvedJavaField field, Root.TOSCache tosCache) {
         assert !field.isStatic();
 
-        Object receiver = nullCheck(popObject(frame, top, -1));
+        Object receiver = nullCheck(tosCache.peekObjectAtOffset(top, frame, -1));
 
         JavaKind kind = field.getJavaKind();
         // @formatter:off
         switch (kind) {
-            case Boolean -> putInt(frame, top, -1, InterpreterToVM.getFieldBoolean(receiver, field, true) ? 1 : 0);
-            case Byte    -> putInt(frame, top, -1, InterpreterToVM.getFieldByte(receiver, field, true));
-            case Char    -> putInt(frame, top, -1, InterpreterToVM.getFieldChar(receiver, field, true));
-            case Short   -> putInt(frame, top, -1, InterpreterToVM.getFieldShort(receiver, field, true));
-            case Int     -> putInt(frame, top, -1, InterpreterToVM.getFieldInt(receiver, field, true));
-            case Double  -> putDouble(frame, top, -1, InterpreterToVM.getFieldDouble(receiver, field, true));
-            case Float   -> putFloat(frame, top, -1, InterpreterToVM.getFieldFloat(receiver, field, true));
-            case Long    -> putLong(frame, top, -1, InterpreterToVM.getFieldLong(receiver, field, true));
-            case Object  -> putObject(frame, top, -1, InterpreterToVM.getFieldObject(receiver, field, true));
+            case Boolean -> {
+                tosCache.replaceTopWithInt(1, InterpreterToVM.getFieldBoolean(receiver, field, true) ? 1 : 0);
+                clearReference(frame, top, -1);
+            }
+            case Byte -> {
+                tosCache.replaceTopWithInt(1, InterpreterToVM.getFieldByte(receiver, field, true));
+                clearReference(frame, top, -1);
+            }
+            case Char -> {
+                tosCache.replaceTopWithInt(1, InterpreterToVM.getFieldChar(receiver, field, true));
+                clearReference(frame, top, -1);
+            }
+            case Short -> {
+                tosCache.replaceTopWithInt(1, InterpreterToVM.getFieldShort(receiver, field, true));
+                clearReference(frame, top, -1);
+            }
+            case Int -> {
+                tosCache.replaceTopWithInt(1, InterpreterToVM.getFieldInt(receiver, field, true));
+                clearReference(frame, top, -1);
+            }
+            case Double -> {
+                tosCache.replaceTopWithDouble(top, frame, 1, InterpreterToVM.getFieldDouble(receiver, field, true));
+                clearReference(frame, top, -1);
+            }
+            case Float -> {
+                tosCache.replaceTopWithFloat(1, InterpreterToVM.getFieldFloat(receiver, field, true));
+                clearReference(frame, top, -1);
+            }
+            case Long -> {
+                tosCache.replaceTopWithLong(top, frame, 1, InterpreterToVM.getFieldLong(receiver, field, true));
+                clearReference(frame, top, -1);
+            }
+            case Object  -> tosCache.replaceTopWithObject(top, frame, 1, InterpreterToVM.getFieldObject(receiver, field, true));
             default      -> throw VMError.shouldNotReachHereAtRuntime();
         }
         // @formatter:on

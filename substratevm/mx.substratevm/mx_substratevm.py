@@ -3104,8 +3104,10 @@ class JvmFuncsFallbacksBuildTask(mx.BuildTask):
             return True, outfile.path + ' does not exist'
 
         if not self.staticlibs:
-            mx.abort('Please use a JDK that contains static JDK libraries.\n'
-                     + 'See: https://github.com/oracle/graal/tree/master/substratevm#quick-start')
+            mx.warn('Please use a JDK that contains static JDK libraries for proper JvmFuncsFallbacks generation.\n'
+                    + 'See: https://github.com/oracle/graal/tree/master/substratevm#quick-start\n'
+                    + 'Proceeding with empty fallbacks (non-oracle JDK).')
+            return True, 'no static JDK libraries found - will generate empty fallbacks'
 
         infile = mx.TimeStampFile.newest([self.jvm_funcs_path] + self.staticlibs)
         needs_build = infile.isNewerThan(outfile)
@@ -3171,7 +3173,7 @@ class JvmFuncsFallbacksBuildTask(mx.BuildTask):
                 mx.run(symbol_dump_command.split() + [staticlib_path], out=collect_symbols_fn('JVM_'), err=suppress_gnu_property_type_5_warnings)
 
             if len(symbols) == 0:
-                mx.abort('Could not find any unresolved JVM_* symbols in static JDK libraries')
+                mx.warn('Could not find any unresolved JVM_* symbols in static JDK libraries. Generating empty JvmFuncsFallbacks.c (using non-oracle JDK without HotSpot static libs).')
             return symbols
 
         def collect_implementations():

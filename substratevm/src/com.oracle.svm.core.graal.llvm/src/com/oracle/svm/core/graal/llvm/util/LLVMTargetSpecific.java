@@ -653,3 +653,193 @@ class LLVMRISCV64TargetSpecificFeature implements InternalFeature {
         }
     }
 }
+
+@AutomaticallyRegisteredFeature
+@Platforms(Platform.ARM32.class)
+class LLVMARM32TargetSpecificFeature implements InternalFeature {
+    // ARM32 EABI DWARF register numbers (ARM IHI0040B):
+    //   r0-r15: DWARF regs 0-15
+    //   SP (r13): DWARF reg 13
+    //   FP (r11): DWARF reg 11  (traditional ARM frame pointer)
+    private static final int ARM32_FP_IDX = 11;
+    private static final int ARM32_SP_IDX = 13;
+
+    @Override
+    public boolean isInConfiguration(IsInConfigurationAccess access) {
+        return SubstrateOptions.useLLVMBackend();
+    }
+
+    @Override
+    public void afterRegistration(AfterRegistrationAccess access) {
+        ImageSingletons.add(LLVMTargetSpecific.class, new LLVMARM32TargetSpecific());
+    }
+
+    @SingletonTraits(access = BuildtimeAccessOnly.class, layeredCallbacks = NoLayeredCallbacks.class, other = DisallowLayered.class)
+    private static final class LLVMARM32TargetSpecific implements LLVMTargetSpecific {
+
+        @Override
+        public String getRegisterInlineAsm(String register) {
+            // ARM32: MOV dst, src  (no size suffix needed)
+            return "MOV $0, " + register;
+        }
+
+        @Override
+        public String setRegisterInlineAsm(String register) {
+            return "MOV " + register + ", $0";
+        }
+
+        @Override
+        public String getJumpInlineAsm() {
+            // BX for branch-and-exchange (handles ARM/Thumb interworking)
+            return "BX $0";
+        }
+
+        @Override
+        public String getLoadInlineAsm(String inputRegister, int offset) {
+            // LDR for word (32-bit) load
+            if (isLoadStoreImmediate(offset, Integer.BYTES)) {
+                return "LDR $0, [" + inputRegister + ", #" + offset + "]";
+            }
+            String scratch = getScratchRegister();
+            return loadOffsetInlineAsm(scratch, offset) + "; ADD " + scratch + ", " + inputRegister + ", " + scratch + "; LDR $0, [" + scratch + "]";
+        }
+
+        @Override
+        public String getLoadInlineAsm(String inputRegister, int offset, int sizeInBytes) {
+            return switch (sizeInBytes) {
+                case Byte.BYTES    -> getLoadStoreInlineAsm("LDRB", "$0", inputRegister, offset, sizeInBytes);
+                case Short.BYTES   -> getLoadStoreInlineAsm("LDRH", "$0", inputRegister, offset, sizeInBytes);
+                case Integer.BYTES -> getLoadStoreInlineAsm("LDR",  "$0", inputRegister, offset, sizeInBytes);
+                default -> throw shouldNotReachHere("Unsupported load size: " + sizeInBytes); // ExcludeFromJacocoGeneratedReport
+            };
+        }
+
+        @Override
+        public String getStoreInlineAsm(String outputRegister, int offset, int sizeInBytes) {
+            return switch (sizeInBytes) {
+                case Byte.BYTES    -> getLoadStoreInlineAsm("STRB", "$0", outputRegister, offset, sizeInBytes);
+                case Short.BYTES   -> getLoadStoreInlineAsm("STRH", "$0", outputRegister, offset, sizeInBytes);
+                case Integer.BYTES -> getLoadStoreInlineAsm("STR",  "$0", outputRegister, offset, sizeInBytes);
+                default -> throw shouldNotReachHere("Unsupported store size: " + sizeInBytes); // ExcludeFromJacocoGeneratedReport
+            };
+        }
+
+        private String getLoadStoreInlineAsm(String instruction, String value, String baseRegister, int offset, int sizeInBytes) {
+            if (isLoadStoreImmediate(offset, sizeInBytes)) {
+                return instruction + " " + value + ", [" + baseRegister + ", #" + offset + "]";
+            }
+            String scratch = getScratchRegister();
+            String addSub = offset < 0 ? "SUB" : "ADD";
+            return loadOffsetInlineAsm(scratch, Math.abs(offset)) + "; " + addSub + " " + scratch + ", " + baseRegister + ", " + scratch + "; " +
+                   instruction + " " + value + ", [" + scratch + "]";
+        }
+
+        /**
+         * ARM32 LDR/STR immediate offset:
+         * - LDR/STR (word/byte): 0..4095 (unsigned 12-bit), must be multiple of access size
+         * - LDRH/STRH: 0..255 (unsigned 8-bit)
+         */
+        private static boolean isLoadStoreImmediate(int offset, int sizeInBytes) {
+            if (offset < 0) {
+                return false; // ARM32 immediate offsets are unsigned in our simplified scheme
+            }
+            if (sizeInBytes == Short.BYTES) {
+                return offset <= 255;
+            }
+            return offset % sizeInBytes == 0 && offset / sizeInBytes <= 4095;
+        }
+
+        private static String loadOffsetInlineAsm(String register, long magnitude) {
+            // Use MOV for small values, MOVW for anything up to 0xffff, MOVW+MOVT for larger
+            if (magnitude <= 0xff) {
+                return "MOV " + register + ", #" + magnitude;
+            } else if (magnitude <= 0xffff) {
+                return "MOVW " + register + ", #" + magnitude;
+            } else {
+                return "MOVW " + register + ", #" + (magnitude & 0xffff) + "; MOVT " + register + ", #" + ((magnitude >> 16) & 0xffff);
+            }
+        }
+
+        @Override
+        public String getFixedRegisterMemoryAccessScratchRegister(String baseRegister, int offset, int sizeInBytes) {
+            return isLoadStoreImmediate(offset, sizeInBytes) ? null : getScratchRegister();
+        }
+
+        @Override
+        public String getAddInlineAssembly(String outputRegister, String inputRegister) {
+            return "ADD " + outputRegister + ", " + outputRegister + ", " + inputRegister;
+        }
+
+        @Override
+        public String getNopInlineAssembly() {
+            return "NOP";
+        }
+
+        @Override
+        public String getJavaFrameAnchorIPInlineAssembly() {
+            // In ARM state, PC reads as current_instruction + 8.
+            // "ADR $0, .+8" stores the address of the next sequential instruction.
+            // In Thumb2 the offset would be different, but GraalVM targets ARM state here.
+            return "ADR $0, .+8";
+        }
+
+        @Override
+        public String getLLVMArchName() {
+            return "arm";
+        }
+
+        @Override
+        public int getCallFrameSeparation() {
+            // ARM32 AAPCS: LR is pushed as part of the function prologue (PUSH {r11, lr}).
+            // The "call frame separation" is the return address slot size.
+            return FrameAccess.returnAddressSize();
+        }
+
+        @Override
+        public int getFramePointerOffset() {
+            // ARM32 AAPCS frame layout (PUSH {r11, lr}; MOV r11, sp):
+            //   [sp+4] = saved LR
+            //   [sp+0] = saved FP (r11)   <-- r11 points here
+            // So FP is at offset -2 * wordSize from the top of the allocated frame.
+            return -2 * SubstrateTarget.getWordSize();
+        }
+
+        @Override
+        public long getCallerSPOffset() {
+            // Caller's SP = callee's FP + 2 * wordSize (skipping saved FP and saved LR)
+            return 2L * SubstrateTarget.getWordSize();
+        }
+
+        @Override
+        public int getStackPointerDwarfRegNum() {
+            return ARM32_SP_IDX; // r13
+        }
+
+        @Override
+        public int getFramePointerDwarfRegNum() {
+            return ARM32_FP_IDX; // r11
+        }
+
+        @Override
+        public List<String> getLLCAdditionalOptions() {
+            List<String> list = new ArrayList<>();
+            list.add("--frame-pointer=all");
+            // Target ARMv7 with NEON/VFPv3 and hard-float ABI for IS01 (armhf)
+            list.add("-mattr=+v7,+vfp3,+d16,+neon");
+            list.add("-target-abi=aapcs");
+            return list;
+        }
+
+        @Override
+        public String getScratchRegister() {
+            // r12 (IP) is the ARM intra-procedure-call scratch register (AAPCS)
+            return "r12";
+        }
+
+        @Override
+        public String getTargetTriple() {
+            // Hard-float ABI for IS01 (ARMv7 EABIHF)
+            return "armv7" + LLVMTargetSpecific.super.getTargetTriple() + "eabihf";
+        }
+    }
+}

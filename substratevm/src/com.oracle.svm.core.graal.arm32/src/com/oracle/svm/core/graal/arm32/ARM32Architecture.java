@@ -28,6 +28,7 @@ import java.nio.ByteOrder;
 
 import jdk.vm.ci.code.Architecture;
 import jdk.vm.ci.code.Register;
+import jdk.vm.ci.meta.JavaKind;
 import jdk.vm.ci.meta.PlatformKind;
 
 /**
@@ -50,6 +51,12 @@ public final class ARM32Architecture extends Architecture {
         super("ARM32", WORD_KIND, ByteOrder.LITTLE_ENDIAN, false,
                         ARM32Registers.allRegisters,
                         0, 4, 4);
+    }
+
+    @Override
+    public PlatformKind getPlatformKind(JavaKind javaKind) {
+        // LLVM performs the concrete type mapping for the ARM32 backend.
+        return WORD_KIND;
     }
 
     /** Minimal 32-bit JVMCI kind used until the JDK exposes an ARM32-specific kind. */

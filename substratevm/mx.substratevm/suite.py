@@ -651,8 +651,7 @@ suite = {
                     "jdk.vm.ci.meta.annotation",
                     "jdk.vm.ci.aarch64",
                     "jdk.vm.ci.amd64",
-                    "jdk.vm.ci.riscv64",
-                    "jdk.vm.ci.arm"
+                    "jdk.vm.ci.riscv64"
                 ],
             },
             "checkstyle": "com.oracle.svm.core",

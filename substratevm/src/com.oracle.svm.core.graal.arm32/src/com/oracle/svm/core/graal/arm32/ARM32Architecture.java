@@ -48,7 +48,7 @@ public final class ARM32Architecture extends Architecture {
 
     public ARM32Architecture() {
         super("ARM32", WORD_KIND, ByteOrder.LITTLE_ENDIAN, false,
-                        ARM32Registers.allRegisters.toArray(new Register[0]),
+                        ARM32Registers.allRegisters,
                         0, 4, 4);
     }
 

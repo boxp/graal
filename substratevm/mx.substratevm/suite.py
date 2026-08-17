@@ -819,6 +819,7 @@ suite = {
             "dependencies": [
                 "com.oracle.graal.reachability",
                 "com.oracle.svm.core.graal.amd64",
+                "com.oracle.svm.core.graal.arm32",
                 "com.oracle.svm.shaded.org.capnproto",
                 "SVM_CONFIGURE",
             ],

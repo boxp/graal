@@ -541,6 +541,12 @@ public class NativeImageGenerator {
             // runtime checked features are the same as static features on RISCV64 for now
             EnumSet<RISCV64.CPUFeature> runtimeCheckedFeatures = architecture.getFeatures().clone();
             return new SubstrateTarget(architecture, true, 16, 0, runtimeCheckedFeatures);
+        } else if (includedIn(platform, Platform.ARM32.class)) {
+            // ARM32 (ARMv7/EABIHF) requires the LLVM backend. JDK 25 labs-openjdk does not
+            // provide jdk.vm.ci.arm, so the ARM32 module supplies the architecture metadata.
+            Architecture architecture = new com.oracle.svm.core.graal.arm32.ARM32Architecture();
+            return new SubstrateTarget(architecture, false, 8, 0,
+                            EnumSet.noneOf(com.oracle.svm.core.graal.arm32.ARM32Architecture.CPUFeature.class));
         } else {
             throw UserError.abort("Architecture specified by platform is not supported: %s", platform.getClass().getTypeName());
         }

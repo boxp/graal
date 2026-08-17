@@ -39,7 +39,6 @@ import org.graalvm.nativeimage.hosted.Feature;
 import com.oracle.svm.core.CPUFeatureAccess;
 import com.oracle.svm.core.SubstrateTarget;
 import com.oracle.svm.core.feature.InternalFeature;
-import com.oracle.svm.core.graal.arm32.ARM32Architecture;
 import com.oracle.svm.core.imagelayer.ImageLayerBuildingSupport;
 import com.oracle.svm.guest.staging.jdk.RuntimeSupport;
 import com.oracle.svm.shared.feature.AutomaticallyRegisteredFeature;
@@ -121,6 +120,10 @@ final class RuntimeCPUFeatureCheckInitializer implements RuntimeSupport.Hook {
 @NodeIntrinsicFactory
 @SingletonTraits(access = AllAccess.class, layeredCallbacks = NoLayeredCallbacks.class, layeredInstallationKind = MultiLayer.class, other = PartiallyLayerAware.class)
 public final class RuntimeCPUFeatureCheckImpl {
+
+    /** Empty CPU feature set for architectures that use the LLVM backend (e.g. ARM32). */
+    private enum LLVMBackendCPUFeature {
+    }
 
     @Platforms(Platform.HOSTED_ONLY.class)
     public static RuntimeCPUFeatureCheckImpl currentLayer() {
@@ -401,9 +404,9 @@ public final class RuntimeCPUFeatureCheckImpl {
             return ((AArch64) arch).getFeatures();
         } else if (arch instanceof RISCV64) {
             return ((RISCV64) arch).getFeatures();
-        } else if (arch instanceof ARM32Architecture) {
-            // ARM32 with LLVM backend has no runtime-detected CPU features.
-            return EnumSet.noneOf(ARM32Architecture.CPUFeature.class);
+        } else if ("ARM32".equals(arch.getName())) {
+            // ARM32 uses the LLVM backend which has no runtime-detected CPU features
+            return EnumSet.noneOf(LLVMBackendCPUFeature.class);
         } else {
             throw GraalError.shouldNotReachHere("unsupported architecture"); // ExcludeFromJacocoGeneratedReport
         }

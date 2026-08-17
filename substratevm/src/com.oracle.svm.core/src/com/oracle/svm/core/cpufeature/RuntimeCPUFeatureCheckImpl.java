@@ -39,6 +39,7 @@ import org.graalvm.nativeimage.hosted.Feature;
 import com.oracle.svm.core.CPUFeatureAccess;
 import com.oracle.svm.core.SubstrateTarget;
 import com.oracle.svm.core.feature.InternalFeature;
+import com.oracle.svm.core.graal.arm32.ARM32Architecture;
 import com.oracle.svm.core.imagelayer.ImageLayerBuildingSupport;
 import com.oracle.svm.guest.staging.jdk.RuntimeSupport;
 import com.oracle.svm.shared.feature.AutomaticallyRegisteredFeature;
@@ -400,6 +401,9 @@ public final class RuntimeCPUFeatureCheckImpl {
             return ((AArch64) arch).getFeatures();
         } else if (arch instanceof RISCV64) {
             return ((RISCV64) arch).getFeatures();
+        } else if (arch instanceof ARM32Architecture) {
+            // ARM32 with LLVM backend has no runtime-detected CPU features.
+            return EnumSet.noneOf(ARM32Architecture.CPUFeature.class);
         } else {
             throw GraalError.shouldNotReachHere("unsupported architecture"); // ExcludeFromJacocoGeneratedReport
         }

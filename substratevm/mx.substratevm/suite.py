@@ -589,8 +589,7 @@ suite = {
                     "jdk.vm.ci.code.site",
                     "jdk.vm.ci.code",
                     "jdk.vm.ci.meta",
-                    "jdk.vm.ci.meta.annotation",
-                    "jdk.vm.ci.arm"
+                    "jdk.vm.ci.meta.annotation"
                 ],
             },
             "checkstyle": "com.oracle.svm.core",
@@ -3130,4 +3129,3 @@ suite = {
 
     },
 }
-

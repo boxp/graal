@@ -25,9 +25,12 @@
 package com.oracle.svm.core.graal.arm32;
 
 import java.nio.ByteOrder;
+import java.util.Set;
 
 import jdk.vm.ci.code.Architecture;
+import jdk.vm.ci.code.CPUFeatureName;
 import jdk.vm.ci.code.Register;
+import jdk.vm.ci.code.Register.RegisterCategory;
 import jdk.vm.ci.meta.JavaKind;
 import jdk.vm.ci.meta.PlatformKind;
 
@@ -44,7 +47,7 @@ public final class ARM32Architecture extends Architecture {
     private static final PlatformKind WORD_KIND = ARM32Kind.DWORD;
 
     /** ARM32 has no runtime-detected CPU features while it uses the LLVM backend. */
-    public enum CPUFeature {
+    public enum CPUFeature implements CPUFeatureName {
     }
 
     public ARM32Architecture() {
@@ -56,6 +59,23 @@ public final class ARM32Architecture extends Architecture {
     @Override
     public PlatformKind getPlatformKind(JavaKind javaKind) {
         // LLVM performs the concrete type mapping for the ARM32 backend.
+        return WORD_KIND;
+    }
+
+    @Override
+    public Set<CPUFeature> getFeatures() {
+        return Set.of();
+    }
+
+    @Override
+    public boolean canStoreValue(RegisterCategory category, PlatformKind kind) {
+        // LLVM performs register allocation and code generation for ARM32.
+        return WORD_KIND.equals(kind);
+    }
+
+    @Override
+    public PlatformKind getLargestStorableKind(RegisterCategory category) {
+        // LLVM performs register allocation and code generation for ARM32.
         return WORD_KIND;
     }
 

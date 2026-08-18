@@ -52,6 +52,7 @@ public class RISCV64LibCHelper {
     public static native int checkCPUFeaturesOrExit(CCharPointer buildtimeCPUFeatureMask, CCharPointer errorMessage);
 
     // Checkstyle: stop
+    @Platforms(Platform.RISCV64.class)
     @CStruct
     @CContext(RISCV64LibCHelperDirectives.class)
     public interface CPUFeatures extends PointerBase {

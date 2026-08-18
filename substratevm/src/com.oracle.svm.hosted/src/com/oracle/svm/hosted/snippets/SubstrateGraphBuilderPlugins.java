@@ -1174,7 +1174,10 @@ public class SubstrateGraphBuilderPlugins {
     }
 
     private static IntegerStamp nonZeroWord() {
-        return StampFactory.forUnsignedInteger(64, 1, 0xffffffffffffffffL);
+        // Use the target's actual word size (32-bit on ARM32, 64-bit on 64-bit platforms).
+        int wordBits = SubstrateTarget.getWordSize() * 8;
+        long maxValue = wordBits >= 64 ? 0xffffffffffffffffL : ((1L << wordBits) - 1);
+        return StampFactory.forUnsignedInteger(wordBits, 1, maxValue);
     }
 
     private static void registerStackValuePlugins(InvocationPlugins plugins) {

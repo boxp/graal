@@ -35,6 +35,8 @@ import org.graalvm.nativeimage.c.CContext;
 import org.graalvm.nativeimage.c.constant.CConstant;
 import org.graalvm.nativeimage.c.function.CEntryPoint;
 import org.graalvm.nativeimage.c.function.CFunction;
+import org.graalvm.nativeimage.c.struct.AllowNarrowingCast;
+import org.graalvm.nativeimage.c.struct.AllowWideningCast;
 import org.graalvm.nativeimage.c.struct.CField;
 import org.graalvm.nativeimage.c.struct.CStruct;
 import org.graalvm.nativeimage.c.type.CIntPointer;
@@ -202,16 +204,27 @@ public class LLVMExceptionUnwind {
 
     @CStruct(addStructKeyword = true)
     private interface _Unwind_Exception extends PointerBase {
+        // exception_class is uint64_t (always 8 bytes, even on ARM32).
+        // On ARM32, PointerBase is 4 bytes. We store a pointer value in this 64-bit field,
+        // using the lower 32 bits (ARM32 is little-endian, so this is safe).
         @CField
+        @AllowNarrowingCast
         PointerBase exception_class();
 
         @CField
+        @AllowWideningCast
         void set_exception_class(PointerBase value);
 
+        // exception_cleanup is a function pointer: 8 bytes on x86_64, 4 bytes on ARM32.
+        // The CAP cache may report 8 bytes (from x86_64 host compilation), so we allow
+        // narrowing/widening casts for ARM32 compatibility. Writing null (zero) is safe
+        // because the unwind runtime ignores this field when it's null.
         @CField
+        @AllowNarrowingCast
         PointerBase exception_cleanup();
 
         @CField
+        @AllowWideningCast
         void set_exception_cleanup(PointerBase value);
     }
 

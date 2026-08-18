@@ -44,35 +44,35 @@ public class Times {
     public interface tms extends PointerBase {
 
         @CField
-        @AllowNarrowingCast
+        @AllowWideningCast
         long tms_utime();
 
         @CField
-        @AllowWideningCast
+        @AllowNarrowingCast
         void set_tms_utime(long value);
 
         @CField
-        @AllowNarrowingCast
+        @AllowWideningCast
         long tms_stime();
 
         @CField
-        @AllowWideningCast
+        @AllowNarrowingCast
         void set_tms_stime(long value);
 
         @CField
-        @AllowNarrowingCast
+        @AllowWideningCast
         long tms_cutime();
 
         @CField
-        @AllowWideningCast
+        @AllowNarrowingCast
         void set_tms_cutime(long value);
 
         @CField
-        @AllowNarrowingCast
+        @AllowWideningCast
         long tms_cstime();
 
         @CField
-        @AllowWideningCast
+        @AllowNarrowingCast
         void set_tms_cstime(long value);
     }
 

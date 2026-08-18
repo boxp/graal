@@ -68,6 +68,7 @@ public class AMD64LibCHelper {
     public static native int checkCPUFeaturesOrExit(CCharPointer buildtimeCPUFeatureMask, CCharPointer errorMessage);
 
     // Checkstyle: stop
+    @Platforms(Platform.AMD64.class)
     @CStruct
     @CContext(AMD64LibCHelperDirectives.class)
     public interface CPUFeatures extends PointerBase {

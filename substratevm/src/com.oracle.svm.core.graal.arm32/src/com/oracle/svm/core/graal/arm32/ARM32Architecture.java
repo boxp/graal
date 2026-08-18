@@ -44,22 +44,26 @@ public final class ARM32Architecture extends Architecture {
 
     public static final ARM32Architecture INSTANCE = new ARM32Architecture();
 
-    private static final PlatformKind WORD_KIND = ARM32Kind.DWORD;
-
     /** ARM32 has no runtime-detected CPU features while it uses the LLVM backend. */
     public enum CPUFeature implements CPUFeatureName {
     }
 
     public ARM32Architecture() {
-        super("ARM32", WORD_KIND, ByteOrder.LITTLE_ENDIAN, false,
+        super("ARM32", ARM32Kind.DWORD, ByteOrder.LITTLE_ENDIAN, false,
                         ARM32Registers.allRegisters,
                         0, 4, 4);
     }
 
     @Override
     public PlatformKind getPlatformKind(JavaKind javaKind) {
-        // LLVM performs the concrete type mapping for the ARM32 backend.
-        return WORD_KIND;
+        return switch (javaKind) {
+            case Boolean, Byte -> ARM32Kind.BYTE;
+            case Short, Char -> ARM32Kind.WORD;
+            case Int, Float -> ARM32Kind.DWORD;
+            case Long, Double -> ARM32Kind.QWORD;
+            case Object -> ARM32Kind.DWORD;   // 32-bit pointer on ARM32
+            default -> ARM32Kind.DWORD;
+        };
     }
 
     @Override
@@ -69,21 +73,32 @@ public final class ARM32Architecture extends Architecture {
 
     @Override
     public boolean canStoreValue(RegisterCategory category, PlatformKind kind) {
-        // LLVM performs register allocation and code generation for ARM32.
-        return WORD_KIND.equals(kind);
+        return kind instanceof ARM32Kind;
     }
 
     @Override
     public PlatformKind getLargestStorableKind(RegisterCategory category) {
-        // LLVM performs register allocation and code generation for ARM32.
-        return WORD_KIND;
+        return ARM32Kind.QWORD;
     }
 
-    /** Minimal 32-bit JVMCI kind used until the JDK exposes an ARM32-specific kind. */
-    private enum ARM32Kind implements PlatformKind {
-        DWORD;
+    /**
+     * ARM32 platform kinds covering all primitive Java types.
+     * These are used by the C type size verifier to match Java types against C struct fields.
+     */
+    public enum ARM32Kind implements PlatformKind {
+        BYTE(1, 'b'),
+        WORD(2, 's'),
+        DWORD(4, 'i'),
+        QWORD(8, 'l');
 
+        private final int sizeInBytes;
+        private final char typeChar;
         private final Key key = new EnumKey<>(this);
+
+        ARM32Kind(int sizeInBytes, char typeChar) {
+            this.sizeInBytes = sizeInBytes;
+            this.typeChar = typeChar;
+        }
 
         @Override
         public Key getKey() {
@@ -92,7 +107,7 @@ public final class ARM32Architecture extends Architecture {
 
         @Override
         public int getSizeInBytes() {
-            return Integer.BYTES;
+            return sizeInBytes;
         }
 
         @Override
@@ -102,7 +117,7 @@ public final class ARM32Architecture extends Architecture {
 
         @Override
         public char getTypeChar() {
-            return 'i';
+            return typeChar;
         }
     }
 }

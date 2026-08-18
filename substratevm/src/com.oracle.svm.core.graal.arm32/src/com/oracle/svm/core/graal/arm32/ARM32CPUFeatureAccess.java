@@ -31,6 +31,10 @@ import org.graalvm.nativeimage.Platforms;
 
 import com.oracle.svm.core.CPUFeatureAccess;
 import com.oracle.svm.shared.Uninterruptible;
+import com.oracle.svm.shared.singletons.traits.BuiltinTraits.AllAccess;
+import com.oracle.svm.shared.singletons.traits.BuiltinTraits.DisallowLayered;
+import com.oracle.svm.shared.singletons.traits.BuiltinTraits.NoLayeredCallbacks;
+import com.oracle.svm.shared.singletons.traits.SingletonTraits;
 
 import jdk.graal.compiler.nodes.spi.LoweringProvider;
 import jdk.vm.ci.code.Architecture;
@@ -39,6 +43,7 @@ import jdk.vm.ci.code.Architecture;
  * ARM32 CPUFeatureAccess: ARM32 with LLVM backend has no runtime CPU feature detection.
  */
 @Platforms(Platform.ARM32.class)
+@SingletonTraits(access = AllAccess.class, layeredCallbacks = NoLayeredCallbacks.class, other = DisallowLayered.class)
 public class ARM32CPUFeatureAccess implements CPUFeatureAccess {
 
     private enum EmptyFeature {

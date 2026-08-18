@@ -26,6 +26,8 @@ package com.oracle.svm.core.posix.headers;
 
 import org.graalvm.nativeimage.c.CContext;
 import org.graalvm.nativeimage.c.function.CFunction;
+import org.graalvm.nativeimage.c.struct.AllowNarrowingCast;
+import org.graalvm.nativeimage.c.struct.AllowWideningCast;
 import org.graalvm.nativeimage.c.struct.CField;
 import org.graalvm.nativeimage.c.struct.CStruct;
 import org.graalvm.word.PointerBase;
@@ -42,27 +44,35 @@ public class Times {
     public interface tms extends PointerBase {
 
         @CField
+        @AllowNarrowingCast
         long tms_utime();
 
         @CField
+        @AllowWideningCast
         void set_tms_utime(long value);
 
         @CField
+        @AllowNarrowingCast
         long tms_stime();
 
         @CField
+        @AllowWideningCast
         void set_tms_stime(long value);
 
         @CField
+        @AllowNarrowingCast
         long tms_cutime();
 
         @CField
+        @AllowWideningCast
         void set_tms_cutime(long value);
 
         @CField
+        @AllowNarrowingCast
         long tms_cstime();
 
         @CField
+        @AllowWideningCast
         void set_tms_cstime(long value);
     }
 

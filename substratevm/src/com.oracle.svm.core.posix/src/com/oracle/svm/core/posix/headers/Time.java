@@ -80,9 +80,11 @@ public class Time {
         void set_tv_sec(long value);
 
         @CField
+        @AllowNarrowingCast
         long tv_nsec();
 
         @CField
+        @AllowWideningCast
         void set_tv_nsec(long value);
     }
 

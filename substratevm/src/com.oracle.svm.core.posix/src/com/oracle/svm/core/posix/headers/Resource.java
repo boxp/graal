@@ -27,6 +27,8 @@ package com.oracle.svm.core.posix.headers;
 import org.graalvm.nativeimage.c.CContext;
 import org.graalvm.nativeimage.c.constant.CConstant;
 import org.graalvm.nativeimage.c.function.CFunction;
+import org.graalvm.nativeimage.c.struct.AllowNarrowingCast;
+import org.graalvm.nativeimage.c.struct.AllowWideningCast;
 import org.graalvm.nativeimage.c.struct.CField;
 import org.graalvm.nativeimage.c.struct.CStruct;
 import org.graalvm.word.PointerBase;
@@ -46,15 +48,19 @@ public class Resource {
     @CStruct(addStructKeyword = true)
     public interface rlimit extends PointerBase {
         @CField
+        @AllowNarrowingCast
         UnsignedWord rlim_cur();
 
         @CField
+        @AllowWideningCast
         void set_rlim_cur(UnsignedWord value);
 
         @CField
+        @AllowNarrowingCast
         UnsignedWord rlim_max();
 
         @CField
+        @AllowWideningCast
         void set_rlim_max(UnsignedWord value);
     }
 

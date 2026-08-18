@@ -11,6 +11,7 @@ import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.Platforms;
 
+import com.oracle.svm.core.CPUFeatureAccess;
 import com.oracle.svm.core.ReservedRegisters;
 import com.oracle.svm.core.SubstrateOptions;
 import com.oracle.svm.shared.feature.AutomaticallyRegisteredFeature;
@@ -37,6 +38,9 @@ class SubstrateARM32Feature implements InternalFeature {
         ImageSingletons.add(SubstrateRegisterConfigFactory.class, new SubstrateARM32RegisterConfigFactory());
 
         ImageSingletons.add(ReservedRegisters.class, new ARM32ReservedRegisters());
+
+        // Register CPUFeatureAccess: ARM32 with LLVM backend has no runtime CPU features
+        ImageSingletons.add(CPUFeatureAccess.class, new ARM32CPUFeatureAccess());
 
         if (!SubstrateOptions.useLLVMBackend()) {
             throw GraalError.unimplemented("The ARM 32-bit native backend is currently unimplemented. Use the LLVM backend (-H:CompilerBackend=llvm).");

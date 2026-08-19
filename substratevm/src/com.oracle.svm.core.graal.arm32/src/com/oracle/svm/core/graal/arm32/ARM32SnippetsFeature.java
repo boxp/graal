@@ -38,13 +38,14 @@ import com.oracle.svm.shared.feature.AutomaticallyRegisteredFeature;
 import com.oracle.svm.core.feature.InternalFeature;
 import com.oracle.svm.core.graal.meta.RuntimeConfiguration;
 import com.oracle.svm.core.graal.snippets.NodeLoweringProvider;
+import com.oracle.svm.core.graal.snippets.arm32.PosixARM32VaListSnippets;
 import com.oracle.svm.core.heap.RestrictHeapAccessCallees;
 
 import jdk.vm.ci.meta.ResolvedJavaMethod;
 
 /**
  * ARM32 snippets feature. Registers lowerings needed for native-image compilation with the LLVM
- * backend on ARM32, including BytecodeExceptionNode and ThrowBytecodeExceptionNode.
+ * backend on ARM32, including BytecodeExceptionNode, ThrowBytecodeExceptionNode, and VaList nodes.
  */
 @AutomaticallyRegisteredFeature
 @Platforms(Platform.ARM32.class)
@@ -60,5 +61,6 @@ class ARM32SnippetsFeature implements InternalFeature {
         }
 
         ARM32NonSnippetLowerings.registerLowerings(runtimeConfig, mustNotAllocatePredicate, options, providers, lowerings, hosted);
+        PosixARM32VaListSnippets.registerLowerings(options, providers, lowerings);
     }
 }

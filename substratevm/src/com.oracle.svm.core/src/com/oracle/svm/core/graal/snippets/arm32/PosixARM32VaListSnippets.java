@@ -71,7 +71,7 @@ import jdk.vm.ci.code.BytecodeFrame;
  * References:<br>
  * ARM IHI0042F - Procedure Call Standard for the ARM Architecture (AAPCS)<br>
  */
-final class PosixARM32VaListSnippets extends SubstrateTemplates implements Snippets {
+public final class PosixARM32VaListSnippets extends SubstrateTemplates implements Snippets {
 
     // ARM32 AAPCS varargs: int/float are 4-byte aligned, long/double are 8-byte aligned
     private static final int STACK_AREA_GP_ALIGNMENT = 4;

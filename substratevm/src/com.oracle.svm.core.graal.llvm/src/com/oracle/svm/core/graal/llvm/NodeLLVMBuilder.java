@@ -42,6 +42,7 @@ import org.graalvm.nativeimage.Platforms;
 
 import com.oracle.svm.core.ReservedRegisters;
 import com.oracle.svm.core.SubstrateOptions;
+import com.oracle.svm.core.SubstrateTarget;
 import com.oracle.svm.core.config.ObjectLayout;
 import com.oracle.svm.core.graal.code.CGlobalDataDirectReference;
 import com.oracle.svm.core.graal.code.CGlobalDataInfo;
@@ -885,6 +886,15 @@ public class NodeLLVMBuilder implements NodeLIRBuilderTool, SubstrateNodeLIRBuil
                     base = builder.buildIntToPtr(base, builder.rawPointerType());
                 } else if (LLVMIRBuilder.isObjectType(baseType)) {
                     typeOverride = true;
+                } else if (LLVMIRBuilder.isIntegerType(baseType)) {
+                    // On 32-bit targets (e.g. ARM32), pointer arithmetic may produce wider integer
+                    // types (e.g. i64 from host-side constant folding). Truncate to the target
+                    // word size before converting to a pointer.
+                    int wordBits = SubstrateTarget.getWordSize() * Byte.SIZE;
+                    if (LLVMIRBuilder.integerTypeWidth(baseType) > wordBits) {
+                        base = builder.buildTrunc(base, wordBits);
+                    }
+                    base = builder.buildIntToPtr(base, builder.rawPointerType());
                 } else {
                     throw shouldNotReachHere(LLVMUtils.dumpValues("unsupported base for address", base)); // ExcludeFromJacocoGeneratedReport
                 }

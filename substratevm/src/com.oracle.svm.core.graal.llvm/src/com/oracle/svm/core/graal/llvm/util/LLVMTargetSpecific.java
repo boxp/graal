@@ -710,6 +710,17 @@ class LLVMARM32TargetSpecificFeature implements InternalFeature {
                 case Byte.BYTES    -> getLoadStoreInlineAsm("LDRB", "$0", inputRegister, offset, sizeInBytes);
                 case Short.BYTES   -> getLoadStoreInlineAsm("LDRH", "$0", inputRegister, offset, sizeInBytes);
                 case Integer.BYTES -> getLoadStoreInlineAsm("LDR",  "$0", inputRegister, offset, sizeInBytes);
+                case Long.BYTES -> {
+                    // ARM32 has no native 64-bit load register. Use two 32-bit LDRs.
+                    // ${0:Q} = even register (low 32 bits), ${0:R} = odd register (high 32 bits).
+                    if (isLoadStoreImmediate(offset, Integer.BYTES) && isLoadStoreImmediate(offset + Integer.BYTES, Integer.BYTES)) {
+                        yield "LDR ${0:Q}, [" + inputRegister + ", #" + offset + "]; LDR ${0:R}, [" + inputRegister + ", #" + (offset + Integer.BYTES) + "]";
+                    }
+                    String scratch = getScratchRegister();
+                    String addSub = offset < 0 ? "SUB" : "ADD";
+                    yield loadOffsetInlineAsm(scratch, Math.abs(offset)) + "; " + addSub + " " + scratch + ", " + inputRegister + ", " + scratch +
+                          "; LDR ${0:Q}, [" + scratch + "]; LDR ${0:R}, [" + scratch + ", #4]";
+                }
                 default -> throw shouldNotReachHere("Unsupported load size: " + sizeInBytes); // ExcludeFromJacocoGeneratedReport
             };
         }
@@ -720,6 +731,17 @@ class LLVMARM32TargetSpecificFeature implements InternalFeature {
                 case Byte.BYTES    -> getLoadStoreInlineAsm("STRB", "$0", outputRegister, offset, sizeInBytes);
                 case Short.BYTES   -> getLoadStoreInlineAsm("STRH", "$0", outputRegister, offset, sizeInBytes);
                 case Integer.BYTES -> getLoadStoreInlineAsm("STR",  "$0", outputRegister, offset, sizeInBytes);
+                case Long.BYTES -> {
+                    // ARM32 has no native 64-bit store register. Use two 32-bit STRs.
+                    // ${0:Q} = even register (low 32 bits), ${0:R} = odd register (high 32 bits).
+                    if (isLoadStoreImmediate(offset, Integer.BYTES) && isLoadStoreImmediate(offset + Integer.BYTES, Integer.BYTES)) {
+                        yield "STR ${0:Q}, [" + outputRegister + ", #" + offset + "]; STR ${0:R}, [" + outputRegister + ", #" + (offset + Integer.BYTES) + "]";
+                    }
+                    String scratch = getScratchRegister();
+                    String addSub = offset < 0 ? "SUB" : "ADD";
+                    yield loadOffsetInlineAsm(scratch, Math.abs(offset)) + "; " + addSub + " " + scratch + ", " + outputRegister + ", " + scratch +
+                          "; STR ${0:Q}, [" + scratch + "]; STR ${0:R}, [" + scratch + ", #4]";
+                }
                 default -> throw shouldNotReachHere("Unsupported store size: " + sizeInBytes); // ExcludeFromJacocoGeneratedReport
             };
         }

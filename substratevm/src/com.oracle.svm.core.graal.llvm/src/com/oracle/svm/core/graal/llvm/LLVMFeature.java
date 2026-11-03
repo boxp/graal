@@ -120,7 +120,8 @@ public class LLVMFeature implements InternalFeature {
 
         ImageSingletons.add(ObjectFileFactory.class, new LLVMObjectFileFactory());
 
-        if (LLVMOptions.UseLLVMDataSection.getValue()) {
+        /* ARM32 images link with the cross compiler given by -H:CCompilerPath. */
+        if (LLVMOptions.UseLLVMDataSection.getValue() && !Platform.includedIn(Platform.ARM32.class)) {
             ImageSingletons.add(CCompilerInvoker.class, new LLVMCCompilerInvoker(ImageSingletons.lookup(TemporaryBuildDirectoryProvider.class).getTemporaryBuildDirectory()));
         }
 

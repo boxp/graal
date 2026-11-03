@@ -37,6 +37,7 @@ import org.graalvm.nativeimage.c.function.CEntryPoint;
 import org.graalvm.nativeimage.c.function.CFunction;
 import org.graalvm.nativeimage.c.struct.AllowNarrowingCast;
 import org.graalvm.nativeimage.c.struct.AllowWideningCast;
+import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.c.struct.CField;
 import org.graalvm.nativeimage.c.struct.CStruct;
 import org.graalvm.nativeimage.c.type.CIntPointer;
@@ -95,6 +96,25 @@ public class LLVMExceptionUnwind {
     @Uninterruptible(reason = "Must not execute a recurring callback before returning", calleeMustBe = false)
     @SuppressWarnings("unused")
     public static int personality(int version, int action, IsolateThread thread, _Unwind_Exception unwindException, _Unwind_Context context) {
+        return personalityImpl(action, context);
+    }
+
+    /**
+     * On ARM the unwinder calls the EHABI personality routine {@code svm_arm32_personality} from
+     * libchelper instead, which maps the unwinder state to the phases used here and calls this
+     * entry point with the thread that was stored into the exception by
+     * {@link LLVMExceptionUnwindHandler#customUnwindException}.
+     */
+    @CEntryPoint(name = "svm_arm32_java_personality", include = IncludeForARM32LLVMOnly.class, publishAs = CEntryPoint.Publish.SymbolOnly)
+    @CEntryPointOptions(prologue = InitializeReservedRegistersPrologue.class, epilogue = CEntryPointOptions.NoEpilogue.class)
+    @Uninterruptible(reason = "Must not execute a recurring callback before returning", calleeMustBe = false)
+    @SuppressWarnings("unused")
+    public static int personalityARM32(int version, int action, IsolateThread thread, _Unwind_Exception unwindException, _Unwind_Context context) {
+        return personalityImpl(action, context);
+    }
+
+    @Uninterruptible(reason = "Must not execute a recurring callback before returning", calleeMustBe = false)
+    private static int personalityImpl(int action, _Unwind_Context context) {
         CIntPointer ipBeforeInstruction = UnsafeStackValue.get(Integer.BYTES);
         Pointer ip = getIPInfo(context, ipBeforeInstruction);
         if (ipBeforeInstruction.read() == 0) {
@@ -132,6 +152,13 @@ public class LLVMExceptionUnwind {
         Throwable exception = ExceptionUnwind.currentException.get();
         ExceptionUnwind.currentException.set(null);
         return exception;
+    }
+
+    private static final class IncludeForARM32LLVMOnly implements BooleanSupplier {
+        @Override
+        public boolean getAsBoolean() {
+            return SubstrateOptions.useLLVMBackend() && Platform.includedIn(Platform.ARM32.class);
+        }
     }
 
     private static final class IncludeForLLVMOnly implements BooleanSupplier {

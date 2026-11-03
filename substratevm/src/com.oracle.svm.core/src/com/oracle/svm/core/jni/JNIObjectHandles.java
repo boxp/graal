@@ -24,6 +24,7 @@
  */
 package com.oracle.svm.core.jni;
 
+import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.ObjectHandle;
 import org.graalvm.word.Pointer;
 import org.graalvm.word.SignedWord;
@@ -99,7 +100,7 @@ public final class JNIObjectHandles {
 
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
     private static boolean isInLocalRange(JNIObjectHandle handle) {
-        return ThreadLocalHandles.isInRange((ObjectHandle) handle);
+        return ThreadLocalHandles.isInRange((ObjectHandle) handle) && !JNIImageHeapHandles.isInRange(handle);
     }
 
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
@@ -273,18 +274,20 @@ public final class JNIObjectHandles {
  * unaware of isolates.
  */
 final class JNIGlobalHandles {
-    static final SignedWord MIN_VALUE = Word.signed(Long.MIN_VALUE);
+    /* On 32-bit targets, the most significant bit is bit 31 and fewer other bits are available. */
+    private static final boolean IS_32_BIT = Platform.includedIn(Platform.ARM32.class);
+    static final SignedWord MIN_VALUE = Word.signed(IS_32_BIT ? Integer.MIN_VALUE : Long.MIN_VALUE);
     static final SignedWord MAX_VALUE = JNIObjectHandles.nullHandle().subtract(1);
     static {
         assert JNIObjectHandles.nullHandle().equal(Word.zero());
     }
 
-    private static final int HANDLE_BITS_COUNT = 31;
+    private static final int HANDLE_BITS_COUNT = IS_32_BIT ? 24 : 31;
     private static final SignedWord HANDLE_BITS_MASK = Word.signed((1L << HANDLE_BITS_COUNT) - 1);
     private static final int VALIDATION_BITS_SHIFT = HANDLE_BITS_COUNT;
-    private static final int VALIDATION_BITS_COUNT = 32;
+    private static final int VALIDATION_BITS_COUNT = IS_32_BIT ? 7 : 32;
     private static final SignedWord VALIDATION_BITS_MASK = Word.signed((1L << VALIDATION_BITS_COUNT) - 1).shiftLeft(VALIDATION_BITS_SHIFT);
-    private static final SignedWord MSB = Word.signed(1L << 63);
+    private static final SignedWord MSB = Word.signed(IS_32_BIT ? Integer.MIN_VALUE : Long.MIN_VALUE);
     private static final ObjectHandlesImpl globalHandles = new ObjectHandlesImpl(JNIObjectHandles.nullHandle().add(1), HANDLE_BITS_MASK, JNIObjectHandles.nullHandle());
 
     @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
@@ -294,7 +297,7 @@ final class JNIGlobalHandles {
 
     private static Word isolateHash() {
         int isolateHash = Long.hashCode(Isolates.getIsolateId());
-        return Word.unsigned(isolateHash);
+        return IS_32_BIT ? Word.unsigned(isolateHash & ((1 << VALIDATION_BITS_COUNT) - 1)) : Word.unsigned(isolateHash);
     }
 
     private static JNIObjectHandle encode(ObjectHandle handle) {
@@ -372,7 +375,8 @@ final class JNIGlobalHandles {
  * JNI specification (in particular, for function {@code GetObjectRefType}).
  */
 final class JNIImageHeapHandles {
-    private static final int OBJ_OFFSET_BITS_COUNT = 32;
+    /* On 32-bit targets, these ranges are above the thread-local handles with 256 MB of offsets. */
+    private static final int OBJ_OFFSET_BITS_COUNT = Platform.includedIn(Platform.ARM32.class) ? 28 : 32;
     private static final Word OBJ_OFFSET_BITS_MASK = Word.unsigned((1L << OBJ_OFFSET_BITS_COUNT) - 1);
     private static final SignedWord LOCAL_RANGE_MIN = Word.signed(0b01).shiftLeft(OBJ_OFFSET_BITS_COUNT);
     private static final SignedWord GLOBAL_RANGE_MIN = Word.signed(0b10).shiftLeft(OBJ_OFFSET_BITS_COUNT);

@@ -24,6 +24,7 @@
  */
 package com.oracle.svm.core.heap;
 
+import com.oracle.svm.core.SubstrateTarget;
 import com.oracle.svm.core.config.ObjectLayout;
 import org.graalvm.nativeimage.ImageSingletons;
 import org.graalvm.nativeimage.Platform;
@@ -108,6 +109,10 @@ public class ReferenceAccessImpl implements ReferenceAccess {
     @Fold
     @Override
     public UnsignedWord getMaxAddressSpaceSize() {
+        if (SubstrateTarget.getWordSize() == Integer.BYTES) {
+            // User space of the usual 3G/1G split, which also fits into a signed word.
+            return Word.unsigned(0x7000_0000L);
+        }
         int referenceSize = ObjectLayout.singleton().getReferenceSize();
         if (referenceSize == Integer.BYTES) {
             int compressionShift = ReferenceAccess.singleton().getCompressEncoding().getShift();

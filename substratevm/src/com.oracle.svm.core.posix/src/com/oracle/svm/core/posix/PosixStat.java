@@ -152,6 +152,7 @@ public final class PosixStat {
     @CStruct(addStructKeyword = true)
     public interface stat extends PointerBase {
         @CField
+        @AllowWideningCast
         long st_ino();
 
         @CField
@@ -162,6 +163,7 @@ public final class PosixStat {
         int st_uid();
 
         @CField
+        @AllowWideningCast
         long st_size();
 
         @CField

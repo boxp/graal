@@ -48,6 +48,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiFunction;
 
 import org.graalvm.collections.Pair;
+import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.c.constant.CEnum;
 import org.graalvm.nativeimage.c.function.CEntryPoint;
 import org.graalvm.word.WordBase;
@@ -302,7 +303,12 @@ public class LLVMGenerator extends CoreProvidersDelegate implements LIRGenerator
         builder.setFunctionAttribute(Attribute.NoRealignStack);
         builder.setGarbageCollector(GCStrategy.CompressedPointers);
         builder.setFunctionCallingConvention(LLVMCallingConvention.GraalCallingConvention);
-        builder.setPersonalityFunction(getFunction(LLVMExceptionUnwind.getPersonalityStub(getMetaAccess()), true));
+        if (Platform.includedIn(Platform.ARM32.class)) {
+            /* The ARM EHABI personality routine is implemented in libchelper (arm32unwind.c). */
+            builder.setPersonalityFunction(builder.getFunction("svm_arm32_personality", builder.functionType(builder.intType(), builder.intType(), builder.rawPointerType(), builder.rawPointerType())));
+        } else {
+            builder.setPersonalityFunction(getFunction(LLVMExceptionUnwind.getPersonalityStub(getMetaAccess()), true));
+        }
 
         if (isEntryPoint) {
             builder.addAlias(SubstrateUtil.mangleName(functionName));
@@ -1229,7 +1235,7 @@ public class LLVMGenerator extends CoreProvidersDelegate implements LIRGenerator
     @Override
     public Value emitReadCallerStackPointer(Stamp wordStamp) {
         LLVMValueRef basePointer = builder.buildFrameAddress(builder.constantInt(0));
-        LLVMValueRef callerSP = builder.buildAdd(builder.buildPtrToInt(basePointer), builder.constantLong(LLVMTargetSpecific.get().getCallerSPOffset()));
+        LLVMValueRef callerSP = builder.buildAdd(builder.buildPtrToInt(basePointer), builder.constantWord(LLVMTargetSpecific.get().getCallerSPOffset()));
         return new LLVMVariable(callerSP);
     }
 
@@ -2259,12 +2265,15 @@ public class LLVMGenerator extends CoreProvidersDelegate implements LIRGenerator
             assert memoryOrder != MemoryOrderMode.RELEASE && memoryOrder != MemoryOrderMode.RELEASE_ACQUIRE;
             LLVMValueRef load;
             if (isReferenceKind(kind)) {
-                LLVMValueRef loadedBits = buildLoad(address, getMemoryAccessType(kind), getMemoryAccessSize(kind));
+                LLVMValueRef loadedBits = buildLoad(address, getMemoryAccessType(kind), getMemoryAccessSize(kind), MemoryOrderMode.VOLATILE);
                 LLVMValueRef loadedReference = builder.buildIntToPtr(buildIntegerResize(loadedBits, LLVMIRBuilder.integerTypeWidth(builder.wordType())), builder.objectType(isCompressedReferenceMemory(
                                 kind)));
                 load = buildReferenceValue(loadedReference, getType(kind), false);
             } else {
-                load = buildLoad(address, getType(kind), getMemoryAccessSize(kind));
+                load = buildLoad(address, getType(kind), getMemoryAccessSize(kind), memoryOrder);
+                if (needsAtomicAccess(memoryOrder, getMemoryAccessSize(kind))) {
+                    builder.setAtomicMonotonic(load);
+                }
             }
             if (memoryOrder == MemoryOrderMode.ACQUIRE || memoryOrder == MemoryOrderMode.VOLATILE) {
                 /*
@@ -2276,12 +2285,32 @@ public class LLVMGenerator extends CoreProvidersDelegate implements LIRGenerator
             return new LLVMVariable(load);
         }
 
-        private LLVMValueRef buildLoad(Value address, LLVMTypeRef type, int sizeInBytes) {
+        /**
+         * Accesses wider than a word are split up unless requested otherwise, which would allow
+         * other threads to observe torn volatile values on 32-bit targets.
+         */
+        private static boolean needsAtomicAccess(MemoryOrderMode memoryOrder, int sizeInBytes) {
+            return memoryOrder != MemoryOrderMode.PLAIN && sizeInBytes > SubstrateTarget.getWordSize();
+        }
+
+        /**
+         * Raw memory accesses are not necessarily aligned, for example in the memory copy loops.
+         * ARMv7 supports this for single loads and stores, but it traps for the load/store multiple
+         * and double instructions that LLVM may pick if it is told that the access is aligned.
+         */
+        private static int getAccessAlignment(LLVMValueRef address, int sizeInBytes, MemoryOrderMode memoryOrder) {
+            if (Platform.includedIn(Platform.ARM32.class) && memoryOrder == MemoryOrderMode.PLAIN && !LLVMIRBuilder.isObjectType(LLVMIRBuilder.typeOf(address))) {
+                return 1;
+            }
+            return sizeInBytes;
+        }
+
+        private LLVMValueRef buildLoad(Value address, LLVMTypeRef type, int sizeInBytes, MemoryOrderMode memoryOrder) {
             LLVMPendingSpecialRegisterRead pendingRead = asPendingSpecialRegisterRead(address);
             if (pendingRead != null && pendingRead.useFixedRegisterAccess() && pendingRead.hasConstantOffset()) {
                 return buildInlineLoad(pendingRead.getRegisterName(), pendingRead.getConstantOffset(), type, sizeInBytes);
             }
-            return builder.buildAlignedLoad(getVal(address), type, sizeInBytes);
+            return builder.buildAlignedLoad(getVal(address), type, getAccessAlignment(getVal(address), sizeInBytes, memoryOrder));
         }
 
         @Override
@@ -2315,7 +2344,10 @@ public class LLVMGenerator extends CoreProvidersDelegate implements LIRGenerator
                 LLVMValueRef address = getVal(addr);
                 LLVMTypeRef addressType = LLVMIRBuilder.typeOf(address);
                 LLVMValueRef castedAddress = builder.buildBitcast(address, builder.pointerType(storeType, LLVMIRBuilder.isObjectType(addressType), false));
-                builder.buildAlignedStore(castedValue, castedAddress, accessSize);
+                LLVMValueRef store = builder.buildAlignedStore(castedValue, castedAddress, getAccessAlignment(castedAddress, accessSize, memoryOrder));
+                if (needsAtomicAccess(memoryOrder, accessSize)) {
+                    builder.setAtomicMonotonic(store);
+                }
             }
 
             if (memoryOrder == MemoryOrderMode.VOLATILE) {

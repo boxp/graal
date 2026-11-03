@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.oracle.objectfile.ObjectFile;
+import com.oracle.svm.core.SubstrateTarget;
 import com.oracle.svm.core.graal.llvm.util.LLVMIRBuilder;
 import com.oracle.svm.shared.util.VMError;
 import com.oracle.svm.shadowed.org.bytedeco.llvm.LLVM.LLVMValueRef;
@@ -89,7 +90,7 @@ public class LLVMDataSectionPart {
     }
 
     private void initializeGlobals() {
-        builder.setInitializer(baseGlobal, builder.constantArray(builder.longType(), content));
+        builder.setInitializer(baseGlobal, builder.constantArray(builder.wordType(), content));
     }
 
     private void applyRelocations() {
@@ -109,7 +110,7 @@ public class LLVMDataSectionPart {
                 symbolsToGlobal.put(name, globalEntry);
             }
 
-            content[(relocOffset - batchOffset) / Long.BYTES] = builder.buildAdd(builder.buildPtrToInt(globalEntry), builder.constantLong(relocation.addend));
+            content[(relocOffset - batchOffset) / SubstrateTarget.getWordSize()] = builder.buildAdd(builder.buildPtrToInt(globalEntry), builder.constantWord(relocation.addend));
         }
     }
 
@@ -122,7 +123,7 @@ public class LLVMDataSectionPart {
             long offset = symbol.getDefinedOffset() - batchOffset;
             String name = symbol.getName();
 
-            LLVMValueRef aliasOffset = builder.buildAdd(builder.buildPtrToInt(baseGlobal), builder.constantLong(offset));
+            LLVMValueRef aliasOffset = builder.buildAdd(builder.buildPtrToInt(baseGlobal), builder.constantWord(offset));
             LLVMValueRef aliasAddress = builder.buildIntToPtr(aliasOffset, builder.pointerType(builder.wordType()));
             LLVMValueRef alias = builder.addAlias(aliasAddress, name);
             LLVMIRBuilder.setSection(alias, sectionName);

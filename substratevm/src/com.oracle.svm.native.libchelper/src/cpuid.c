@@ -917,7 +917,11 @@ void determineCPUFeatures(CPUFeatures* features) {
 /*
  * Dummy for non AMD64, non AArch64 and non RISCV64
  */
-void determineCPUFeatures(void* features) {
+typedef struct {
+  uint8_t unused;
+} CPUFeatures;
+
+void determineCPUFeatures(CPUFeatures* features) {
 }
 
 #endif

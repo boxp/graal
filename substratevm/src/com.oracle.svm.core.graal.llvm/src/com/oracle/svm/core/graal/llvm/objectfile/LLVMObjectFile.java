@@ -32,7 +32,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.nio.LongBuffer;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -212,32 +211,32 @@ public class LLVMObjectFile extends ObjectFile {
                 if (content.length != 0) {
                     ByteBuffer contentByteBuffer = ByteBuffer.wrap(content);
                     contentByteBuffer.order(byteOrder);
-                    LongBuffer contentLongBuffer = contentByteBuffer.asLongBuffer();
+                    int wordSize = SubstrateTarget.getWordSize();
+                    int wordBits = wordSize * Byte.SIZE;
 
-                    int contentLength = content.length / Long.BYTES;
-                    int remainder = content.length % Long.BYTES;
+                    int contentLength = content.length / wordSize;
+                    int remainder = content.length % wordSize;
                     boolean hasRemainder = remainder != 0;
                     LLVMValueRef[] valueArray = new LLVMValueRef[contentLength + (hasRemainder ? 1 : 0)];
                     for (int j = 0; j < contentLength; ++j) {
-                        valueArray[j] = builder.constantLong(contentLongBuffer.get());
+                        long value = wordSize == Long.BYTES ? contentByteBuffer.getLong() : contentByteBuffer.getInt();
+                        valueArray[j] = builder.constantInteger(value, wordBits);
                     }
 
                     if (hasRemainder) {
-                        long lastValue = 0;
-                        while (remainder > 0) {
-                            lastValue |= content[content.length - remainder - 1];
-                            lastValue = lastValue << Byte.SIZE;
-                            remainder--;
-                        }
-                        valueArray[contentLength] = builder.constantLong(byteOrder == ByteOrder.BIG_ENDIAN ? lastValue : Long.reverseBytes(lastValue));
+                        byte[] lastWord = new byte[wordSize];
+                        System.arraycopy(content, content.length - remainder, lastWord, 0, remainder);
+                        ByteBuffer lastWordBuffer = ByteBuffer.wrap(lastWord).order(byteOrder);
+                        long lastValue = wordSize == Long.BYTES ? lastWordBuffer.getLong() : lastWordBuffer.getInt();
+                        valueArray[contentLength] = builder.constantInteger(lastValue, wordBits);
                     }
 
                     LLVMSymtab symtab = (LLVMSymtab) getSymbolTable();
                     List<LLVMSymtab.Entry> symbols = symtab.getSectionEntries(e.getName());
 
-                    for (int i = 0; i < valueArray.length; i += (batchSize / Long.BYTES)) {
-                        LLVMValueRef[] batchContent = Arrays.copyOfRange(valueArray, i, Math.min(valueArray.length, i + (batchSize / Long.BYTES)));
-                        int batchOffset = i * Long.BYTES;
+                    for (int i = 0; i < valueArray.length; i += (batchSize / wordSize)) {
+                        LLVMValueRef[] batchContent = Arrays.copyOfRange(valueArray, i, Math.min(valueArray.length, i + (batchSize / wordSize)));
+                        int batchOffset = i * wordSize;
                         long batchEnd = Math.min(content.length, batchOffset + batchSize);
                         boolean isLastBatch = batchEnd == content.length;
                         List<Integer> batchRelocOffsets = section.getRelocations().keySet().stream()
@@ -363,7 +362,7 @@ public class LLVMObjectFile extends ObjectFile {
         @Override
         public byte[] getOrDecideContent(Map<Element, LayoutDecisionMap> alreadyDecided, byte[] contentHint) {
             // We return a dummy word to avoid having another section with an offset of 0.
-            return new byte[Long.BYTES];
+            return new byte[SubstrateTarget.getWordSize()];
         }
 
         @Override
@@ -375,7 +374,7 @@ public class LLVMObjectFile extends ObjectFile {
         @Override
         public int getOrDecideSize(Map<Element, LayoutDecisionMap> alreadyDecided, int sizeHint) {
             // We return a dummy word to avoid having another section with an offset of 0.
-            return Long.BYTES;
+            return SubstrateTarget.getWordSize();
         }
     }
 

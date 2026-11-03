@@ -616,6 +616,10 @@ public class LLVMIRBuilder implements AutoCloseable {
         return constantInteger(x, 64);
     }
 
+    public LLVMValueRef constantWord(long x) {
+        return constantInteger(x, integerTypeWidth(wordType()));
+    }
+
     public LLVMValueRef constantInteger(long value, int bits) {
         return LLVM.LLVMConstInt(integerType(bits), value, FALSE);
     }
@@ -934,7 +938,9 @@ public class LLVMIRBuilder implements AutoCloseable {
         return LLVM.LLVMBuildIsNull(builder, value, DEFAULT_INSTR_NAME);
     }
 
-    public LLVMValueRef buildCompare(Condition cond, LLVMValueRef a, LLVMValueRef b, boolean unordered) {
+    public LLVMValueRef buildCompare(Condition cond, LLVMValueRef aValue, LLVMValueRef bValue, boolean unordered) {
+        LLVMValueRef a = LLVM.LLVMIsAConstantInt(aValue) != null ? coerceConstant(aValue, LLVM.LLVMTypeOf(bValue)) : aValue;
+        LLVMValueRef b = coerceConstant(bValue, LLVM.LLVMTypeOf(a));
         LLVMTypeRef aType = LLVM.LLVMTypeOf(a);
         LLVMTypeRef bType = LLVM.LLVMTypeOf(b);
 
@@ -1098,7 +1104,24 @@ public class LLVMIRBuilder implements AutoCloseable {
         return buildBinaryNumberOp(a, b, LLVM::LLVMBuildURem, null);
     }
 
-    private LLVMValueRef buildBinaryNumberOp(LLVMValueRef a, LLVMValueRef b, BinaryBuilder integerBuilder, BinaryBuilder realBuilder) {
+    /**
+     * On 32-bit targets the shared compiler and SubstrateVM lowerings still create some offsets as
+     * {@code long} constants even though the value they are combined with is word-sized. Constants
+     * are resized to the type of the other operand; a mismatch between non-constant operands stays
+     * an error.
+     */
+    private LLVMValueRef coerceConstant(LLVMValueRef constant, LLVMTypeRef otherType) {
+        LLVMTypeRef constantType = LLVM.LLVMTypeOf(constant);
+        if (SubstrateTarget.getWordSize() == Integer.BYTES && isIntegerType(constantType) && isIntegerType(otherType) && integerTypeWidth(constantType) != integerTypeWidth(otherType) &&
+                        LLVM.LLVMIsAConstantInt(constant) != null) {
+            return LLVM.LLVMConstInt(otherType, LLVM.LLVMConstIntGetSExtValue(constant), TRUE);
+        }
+        return constant;
+    }
+
+    private LLVMValueRef buildBinaryNumberOp(LLVMValueRef aValue, LLVMValueRef bValue, BinaryBuilder integerBuilder, BinaryBuilder realBuilder) {
+        LLVMValueRef a = LLVM.LLVMIsAConstantInt(aValue) != null ? coerceConstant(aValue, LLVM.LLVMTypeOf(bValue)) : aValue;
+        LLVMValueRef b = coerceConstant(bValue, LLVM.LLVMTypeOf(a));
         LLVMTypeRef aType = LLVM.LLVMTypeOf(a);
         LLVMTypeRef bType = LLVM.LLVMTypeOf(b);
         assert compatibleTypes(aType, bType) : dumpValues("invalid binary operation arguments", a, b);
@@ -1440,9 +1463,14 @@ public class LLVMIRBuilder implements AutoCloseable {
         LLVM.LLVMBuildStore(builder, value, address);
     }
 
-    public void buildAlignedStore(LLVMValueRef value, LLVMValueRef address, int alignment) {
+    public LLVMValueRef buildAlignedStore(LLVMValueRef value, LLVMValueRef address, int alignment) {
         LLVMValueRef store = LLVM.LLVMBuildStore(builder, value, address);
         LLVM.LLVMSetAlignment(store, alignment);
+        return store;
+    }
+
+    public void setAtomicMonotonic(LLVMValueRef loadOrStore) {
+        LLVM.LLVMSetOrdering(loadOrStore, LLVM.LLVMAtomicOrderingMonotonic);
     }
 
     public void buildVolatileStore(LLVMValueRef value, LLVMValueRef address, int alignment) {

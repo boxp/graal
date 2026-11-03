@@ -134,6 +134,10 @@ public class Signal {
         @Platforms({Platform.LINUX_RISCV64.class})
         mcontext_linux_riscv64_t uc_mcontext_linux_riscv64();
 
+        @CFieldAddress("uc_mcontext")
+        @Platforms({Platform.LINUX_ARM32.class})
+        mcontext_linux_arm32_t uc_mcontext_linux_arm32();
+
         @CField("uc_mcontext")
         @Platforms({Platform.DARWIN_AMD64.class})
         AMD64DarwinMContext64 uc_mcontext_darwin_amd64();
@@ -385,6 +389,13 @@ public class Signal {
      * Information about Linux's RISCV64 struct sigcontext uc_mcontext can be found at
      * https://github.com/torvalds/linux/blob/9e1ff307c779ce1f0f810c7ecce3d95bbae40896/arch/riscv/include/uapi/asm/sigcontext.h#L17
      */
+    @CStruct(value = "mcontext_t")
+    @Platforms({Platform.LINUX_ARM32.class})
+    public interface mcontext_linux_arm32_t extends PointerBase {
+        @CFieldAddress(value = "arm_r0")
+        WordPointer regs();
+    }
+
     @CStruct(value = "mcontext_t")
     @Platforms({Platform.LINUX_RISCV64.class})
     public interface mcontext_linux_riscv64_t extends PointerBase {

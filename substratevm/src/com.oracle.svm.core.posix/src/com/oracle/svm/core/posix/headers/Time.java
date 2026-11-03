@@ -49,12 +49,14 @@ public class Time {
     @CStruct(addStructKeyword = true)
     public interface timeval extends PointerBase {
         @CField
+        @AllowWideningCast
         long tv_sec();
 
         @CFieldAddress
         CLongPointer addressOftv_sec();
 
         @CField
+        @AllowNarrowingCast
         void set_tv_sec(long value);
 
         @CField
@@ -74,9 +76,11 @@ public class Time {
     @CStruct(addStructKeyword = true)
     public interface timespec extends PointerBase {
         @CField
+        @AllowWideningCast
         long tv_sec();
 
         @CField
+        @AllowNarrowingCast
         void set_tv_sec(long value);
 
         @CField

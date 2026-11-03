@@ -853,7 +853,7 @@ class LLVMARM32TargetSpecificFeature implements InternalFeature {
             // Target ARMv7 with NEON/VFPv3 and hard-float ABI for IS01 (armhf)
             // All code ends up in a single input section for the linker, which therefore cannot
             // insert range extension thunks for code larger than the 32 MB range of BL.
-            list.add("-mattr=+v7,+vfp3,+neon,+long-calls");
+            list.add("-mattr=+v7,+db,+vfp3,+neon,+long-calls");
             list.add("-target-abi=aapcs");
             // Also applies to modules without a triple (data section) which must link with the rest
             list.add("-mtriple=" + getTargetTriple());

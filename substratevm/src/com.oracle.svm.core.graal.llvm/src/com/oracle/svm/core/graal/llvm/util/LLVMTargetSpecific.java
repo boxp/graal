@@ -805,10 +805,8 @@ class LLVMARM32TargetSpecificFeature implements InternalFeature {
 
         @Override
         public String getJavaFrameAnchorIPInlineAssembly() {
-            // In ARM state, PC reads as current_instruction + 8.
-            // "ADR $0, .+8" stores the address of the next sequential instruction.
-            // In Thumb2 the offset would be different, but GraalVM targets ARM state here.
-            return "ADR $0, .+8";
+            // The assembler accounts for the PC offset of ARM state: this is the next instruction.
+            return "ADR $0, .+4";
         }
 
         @Override
@@ -853,7 +851,9 @@ class LLVMARM32TargetSpecificFeature implements InternalFeature {
             List<String> list = new ArrayList<>();
             list.add("--frame-pointer=all");
             // Target ARMv7 with NEON/VFPv3 and hard-float ABI for IS01 (armhf)
-            list.add("-mattr=+v7,+vfp3,+d16,+neon");
+            // All code ends up in a single input section for the linker, which therefore cannot
+            // insert range extension thunks for code larger than the 32 MB range of BL.
+            list.add("-mattr=+v7,+vfp3,+neon,+long-calls");
             list.add("-target-abi=aapcs");
             // Also applies to modules without a triple (data section) which must link with the rest
             list.add("-mtriple=" + getTargetTriple());

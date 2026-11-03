@@ -1463,9 +1463,14 @@ public class LLVMIRBuilder implements AutoCloseable {
         LLVM.LLVMBuildStore(builder, value, address);
     }
 
-    public void buildAlignedStore(LLVMValueRef value, LLVMValueRef address, int alignment) {
+    public LLVMValueRef buildAlignedStore(LLVMValueRef value, LLVMValueRef address, int alignment) {
         LLVMValueRef store = LLVM.LLVMBuildStore(builder, value, address);
         LLVM.LLVMSetAlignment(store, alignment);
+        return store;
+    }
+
+    public void setAtomicMonotonic(LLVMValueRef loadOrStore) {
+        LLVM.LLVMSetOrdering(loadOrStore, LLVM.LLVMAtomicOrderingMonotonic);
     }
 
     public void buildVolatileStore(LLVMValueRef value, LLVMValueRef address, int alignment) {

@@ -2271,6 +2271,9 @@ public class LLVMGenerator extends CoreProvidersDelegate implements LIRGenerator
                 load = buildReferenceValue(loadedReference, getType(kind), false);
             } else {
                 load = buildLoad(address, getType(kind), getMemoryAccessSize(kind));
+                if (needsAtomicAccess(memoryOrder, getMemoryAccessSize(kind))) {
+                    builder.setAtomicMonotonic(load);
+                }
             }
             if (memoryOrder == MemoryOrderMode.ACQUIRE || memoryOrder == MemoryOrderMode.VOLATILE) {
                 /*
@@ -2280,6 +2283,14 @@ public class LLVMGenerator extends CoreProvidersDelegate implements LIRGenerator
                 emitMembar(MemoryBarriers.LOAD_LOAD | MemoryBarriers.LOAD_STORE);
             }
             return new LLVMVariable(load);
+        }
+
+        /**
+         * Accesses wider than a word are split up unless requested otherwise, which would allow
+         * other threads to observe torn volatile values on 32-bit targets.
+         */
+        private static boolean needsAtomicAccess(MemoryOrderMode memoryOrder, int sizeInBytes) {
+            return memoryOrder != MemoryOrderMode.PLAIN && sizeInBytes > SubstrateTarget.getWordSize();
         }
 
         private LLVMValueRef buildLoad(Value address, LLVMTypeRef type, int sizeInBytes) {
@@ -2321,7 +2332,10 @@ public class LLVMGenerator extends CoreProvidersDelegate implements LIRGenerator
                 LLVMValueRef address = getVal(addr);
                 LLVMTypeRef addressType = LLVMIRBuilder.typeOf(address);
                 LLVMValueRef castedAddress = builder.buildBitcast(address, builder.pointerType(storeType, LLVMIRBuilder.isObjectType(addressType), false));
-                builder.buildAlignedStore(castedValue, castedAddress, accessSize);
+                LLVMValueRef store = builder.buildAlignedStore(castedValue, castedAddress, accessSize);
+                if (needsAtomicAccess(memoryOrder, accessSize)) {
+                    builder.setAtomicMonotonic(store);
+                }
             }
 
             if (memoryOrder == MemoryOrderMode.VOLATILE) {

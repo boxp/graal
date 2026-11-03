@@ -29,6 +29,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 
+import com.oracle.svm.core.SubstrateTarget;
 import com.oracle.objectfile.BuildDependency;
 import com.oracle.objectfile.ElementImpl;
 import com.oracle.objectfile.LayoutDecisionMap;
@@ -138,7 +139,8 @@ public class LLVMUserDefinedSection extends LLVMSection implements ObjectFile.Re
     @Override
     public void markRelocationSite(int offset, ByteBuffer bb, ObjectFile.RelocationKind k, String symbolName, long addend) {
         LLVMSymtab syms = (LLVMSymtab) getOwner().elementForName("symtab");
-        if (k != ObjectFile.RelocationKind.DIRECT_8) {
+        ObjectFile.RelocationKind wordRelocation = SubstrateTarget.getWordSize() == Long.BYTES ? ObjectFile.RelocationKind.DIRECT_8 : ObjectFile.RelocationKind.DIRECT_4;
+        if (k != wordRelocation) {
             VMError.shouldNotReachHere("Got relocation " + k + ": " + symbolName + " at offset: " + offset + " with addend: " + addend);
         }
         relocations.put(offset, new Entry(offset, syms.getSymbol(symbolName), addend));

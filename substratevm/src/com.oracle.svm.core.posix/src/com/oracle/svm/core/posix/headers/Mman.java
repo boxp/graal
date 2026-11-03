@@ -35,7 +35,12 @@ import org.graalvm.nativeimage.c.type.CCharPointer;
 import org.graalvm.nativeimage.c.type.CConst;
 import org.graalvm.word.Pointer;
 import org.graalvm.word.PointerBase;
+import org.graalvm.word.SignedWord;
 import org.graalvm.word.UnsignedWord;
+
+import com.oracle.svm.shared.Uninterruptible;
+
+import org.graalvm.word.impl.Word;
 
 // Checkstyle: stop
 
@@ -79,15 +84,25 @@ public class Mman {
     @CConstant
     public static native PointerBase MAP_FAILED();
 
-    @CFunction
-    public static native Pointer mmap(PointerBase addr, UnsignedWord len, int prot, int flags, int fd, long offset);
+    public static Pointer mmap(PointerBase addr, UnsignedWord len, int prot, int flags, int fd, long offset) {
+        return mmap0(addr, len, prot, flags, fd, Word.signed(offset));
+    }
+
+    /** {@code off_t} is word-sized with the default 32-bit glibc ABI. */
+    @CFunction("mmap")
+    private static native Pointer mmap0(PointerBase addr, UnsignedWord len, int prot, int flags, int fd, SignedWord offset);
 
     @CFunction
     public static native int munmap(PointerBase addr, UnsignedWord len);
 
     public static class NoTransitions {
-        @CFunction(transition = Transition.NO_TRANSITION)
-        public static native Pointer mmap(PointerBase addr, UnsignedWord len, int prot, int flags, int fd, long offset);
+        @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+        public static Pointer mmap(PointerBase addr, UnsignedWord len, int prot, int flags, int fd, long offset) {
+            return mmap0(addr, len, prot, flags, fd, Word.signed(offset));
+        }
+
+        @CFunction(value = "mmap", transition = Transition.NO_TRANSITION)
+        private static native Pointer mmap0(PointerBase addr, UnsignedWord len, int prot, int flags, int fd, SignedWord offset);
 
         @CFunction(transition = Transition.NO_TRANSITION)
         public static native int munmap(PointerBase addr, UnsignedWord len);

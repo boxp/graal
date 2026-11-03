@@ -45,6 +45,7 @@ import org.graalvm.word.PointerBase;
 import org.graalvm.word.UnsignedWord;
 import org.graalvm.word.impl.Word;
 
+import com.oracle.svm.core.SubstrateTarget;
 import com.oracle.svm.core.IsolateArgumentAccess;
 import com.oracle.svm.core.IsolateArgumentParser;
 import com.oracle.svm.core.IsolateArguments;
@@ -112,6 +113,7 @@ import jdk.graal.compiler.api.replacements.Fold;
 @SingletonTraits(access = AllAccess.class, layeredCallbacks = SingleLayer.class, layeredInstallationKind = InitialLayerOnly.class)
 public class AddressRangeCommittedMemoryProvider extends ChunkBasedCommittedMemoryProvider {
     private static final long MIN_RESERVED_ADDRESS_SPACE_SIZE = 32L * 1024 * 1024 * 1024;
+    private static final long MIN_RESERVED_ADDRESS_SPACE_SIZE_32BIT = 1024L * 1024L * 1024L;
 
     protected static final int NO_ERROR = 0;
     protected static final int OUT_OF_ADDRESS_SPACE = 1;
@@ -180,7 +182,12 @@ public class AddressRangeCommittedMemoryProvider extends ChunkBasedCommittedMemo
              */
             int maxHeapSizeOptionIndex = IsolateArgumentParser.getOptionIndex(SubstrateGCOptions.MaxHeapSize);
             UnsignedWord maxHeapSize = Word.unsigned(IsolateArgumentAccess.readLong(arguments, maxHeapSizeOptionIndex));
-            reservedSize = UnsignedUtils.max(maxHeapSize, Word.unsigned(MIN_RESERVED_ADDRESS_SPACE_SIZE));
+            if (SubstrateTarget.getWordSize() == Integer.BYTES) {
+                /* The default does not fit into a 32-bit word, and neither does most of the rest. */
+                reservedSize = UnsignedUtils.max(maxHeapSize, Word.unsigned(MIN_RESERVED_ADDRESS_SPACE_SIZE_32BIT));
+            } else {
+                reservedSize = UnsignedUtils.max(maxHeapSize, Word.unsigned(MIN_RESERVED_ADDRESS_SPACE_SIZE));
+            }
         }
         reservedSize = UnsignedUtils.min(reservedSize, ReferenceAccess.singleton().getMaxAddressSpaceSize());
 

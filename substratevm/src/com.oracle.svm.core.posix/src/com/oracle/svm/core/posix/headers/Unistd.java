@@ -36,6 +36,9 @@ import org.graalvm.word.PointerBase;
 import org.graalvm.word.SignedWord;
 import org.graalvm.word.UnsignedWord;
 
+import com.oracle.svm.core.SubstrateTarget;
+import com.oracle.svm.shared.Uninterruptible;
+
 // Checkstyle: stop
 
 /**
@@ -88,8 +91,14 @@ public class Unistd {
     @Platforms(Platform.DARWIN.class)
     public static native int _CS_DARWIN_USER_TEMP_DIR();
 
-    @CFunction
-    public static native long sysconf(int name);
+    public static long sysconf(int name) {
+        /* The C return type is long, which is word-sized. Keep the sign of error results. */
+        SignedWord result = sysconf0(name);
+        return Long.BYTES == SubstrateTarget.getWordSize() ? result.rawValue() : (int) result.rawValue();
+    }
+
+    @CFunction("sysconf")
+    private static native SignedWord sysconf0(int name);
 
     @CFunction
     public static native UnsignedWord confstr(int name, CCharPointer buf, UnsignedWord len);
@@ -125,8 +134,15 @@ public class Unistd {
         @CFunction(transition = Transition.NO_TRANSITION)
         public static native SignedWord write(int fd, PointerBase buf, UnsignedWord n);
 
-        @CFunction(transition = Transition.NO_TRANSITION)
-        public static native long sysconf(int name);
+        @Uninterruptible(reason = "Called from uninterruptible code.", mayBeInlined = true)
+        public static long sysconf(int name) {
+            /* The C return type is long, which is word-sized. Keep the sign of error results. */
+            SignedWord result = sysconf0(name);
+            return Long.BYTES == SubstrateTarget.getWordSize() ? result.rawValue() : (int) result.rawValue();
+        }
+
+        @CFunction(value = "sysconf", transition = Transition.NO_TRANSITION)
+        private static native SignedWord sysconf0(int name);
 
         @CFunction(transition = Transition.NO_TRANSITION)
         public static native SignedWord lseek(int fd, SignedWord offset, int whence);

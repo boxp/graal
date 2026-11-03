@@ -678,6 +678,12 @@ class LLVMARM32TargetSpecificFeature implements InternalFeature {
     private static final class LLVMARM32TargetSpecific implements LLVMTargetSpecific {
 
         @Override
+        public String getLLVMRegisterName(String register) {
+            // llvm.read_register only knows the stack pointer by its alias on ARM
+            return "r13".equals(register) ? "sp" : register;
+        }
+
+        @Override
         public String getRegisterInlineAsm(String register) {
             // ARM32: MOV dst, src  (no size suffix needed)
             return "MOV $0, " + register;
@@ -812,9 +818,9 @@ class LLVMARM32TargetSpecificFeature implements InternalFeature {
 
         @Override
         public int getCallFrameSeparation() {
-            // ARM32 AAPCS: LR is pushed as part of the function prologue (PUSH {r11, lr}).
-            // The "call frame separation" is the return address slot size.
-            return FrameAccess.returnAddressSize();
+            // ARM32 AAPCS: BL does not touch the stack, LR is pushed by the callee's prologue
+            // (PUSH {r11, lr}) and already part of the frame size reported by LLVM.
+            return 0;
         }
 
         @Override
@@ -849,6 +855,9 @@ class LLVMARM32TargetSpecificFeature implements InternalFeature {
             // Target ARMv7 with NEON/VFPv3 and hard-float ABI for IS01 (armhf)
             list.add("-mattr=+v7,+vfp3,+d16,+neon");
             list.add("-target-abi=aapcs");
+            // Also applies to modules without a triple (data section) which must link with the rest
+            list.add("-mtriple=" + getTargetTriple());
+            list.add("-float-abi=hard");
             return list;
         }
 

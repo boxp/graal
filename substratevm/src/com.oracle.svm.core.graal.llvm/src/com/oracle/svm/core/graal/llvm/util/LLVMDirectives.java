@@ -27,6 +27,7 @@ package com.oracle.svm.core.graal.llvm.util;
 import java.util.Collections;
 import java.util.List;
 
+import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.c.CContext;
 
 import com.oracle.svm.core.SubstrateOptions;
@@ -40,6 +41,18 @@ public class LLVMDirectives implements CContext.Directives {
     @Override
     public List<String> getHeaderFiles() {
         return Collections.singletonList("<unwind.h>");
+    }
+
+    @Override
+    public List<String> getMacroDefinitions() {
+        if (Platform.includedIn(Platform.ARM32.class)) {
+            /*
+             * The ARM EHABI <unwind.h> uses _Unwind_State instead of phases. The constants below
+             * are only exchanged with the personality wrapper in libchelper (arm32unwind.c).
+             */
+            return List.of("_URC_FATAL_PHASE1_ERROR _URC_FAILURE", "_UA_SEARCH_PHASE 1", "_UA_CLEANUP_PHASE 2");
+        }
+        return Collections.emptyList();
     }
 
     @Override

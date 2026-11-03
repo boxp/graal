@@ -48,6 +48,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiFunction;
 
 import org.graalvm.collections.Pair;
+import org.graalvm.nativeimage.Platform;
 import org.graalvm.nativeimage.c.constant.CEnum;
 import org.graalvm.nativeimage.c.function.CEntryPoint;
 import org.graalvm.word.WordBase;
@@ -302,7 +303,12 @@ public class LLVMGenerator extends CoreProvidersDelegate implements LIRGenerator
         builder.setFunctionAttribute(Attribute.NoRealignStack);
         builder.setGarbageCollector(GCStrategy.CompressedPointers);
         builder.setFunctionCallingConvention(LLVMCallingConvention.GraalCallingConvention);
-        builder.setPersonalityFunction(getFunction(LLVMExceptionUnwind.getPersonalityStub(getMetaAccess()), true));
+        if (Platform.includedIn(Platform.ARM32.class)) {
+            /* The ARM EHABI personality routine is implemented in libchelper (arm32unwind.c). */
+            builder.setPersonalityFunction(builder.getFunction("svm_arm32_personality", builder.functionType(builder.intType(), builder.intType(), builder.rawPointerType(), builder.rawPointerType())));
+        } else {
+            builder.setPersonalityFunction(getFunction(LLVMExceptionUnwind.getPersonalityStub(getMetaAccess()), true));
+        }
 
         if (isEntryPoint) {
             builder.addAlias(SubstrateUtil.mangleName(functionName));
@@ -1229,7 +1235,7 @@ public class LLVMGenerator extends CoreProvidersDelegate implements LIRGenerator
     @Override
     public Value emitReadCallerStackPointer(Stamp wordStamp) {
         LLVMValueRef basePointer = builder.buildFrameAddress(builder.constantInt(0));
-        LLVMValueRef callerSP = builder.buildAdd(builder.buildPtrToInt(basePointer), builder.constantLong(LLVMTargetSpecific.get().getCallerSPOffset()));
+        LLVMValueRef callerSP = builder.buildAdd(builder.buildPtrToInt(basePointer), builder.constantWord(LLVMTargetSpecific.get().getCallerSPOffset()));
         return new LLVMVariable(callerSP);
     }
 

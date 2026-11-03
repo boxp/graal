@@ -238,7 +238,11 @@ public class SubstrateOptions {
         if (value != null) {
             return value;
         }
-        return true;
+        /*
+         * References on 32-bit targets are already word-sized: compressing them gains nothing and
+         * the shift-based encoding cannot represent the whole address space.
+         */
+        return !Platform.includedIn(Platform.ARM32.class);
     }
 
     /**

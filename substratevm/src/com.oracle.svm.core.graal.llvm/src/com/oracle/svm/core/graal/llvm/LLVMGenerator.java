@@ -2265,15 +2265,12 @@ public class LLVMGenerator extends CoreProvidersDelegate implements LIRGenerator
             assert memoryOrder != MemoryOrderMode.RELEASE && memoryOrder != MemoryOrderMode.RELEASE_ACQUIRE;
             LLVMValueRef load;
             if (isReferenceKind(kind)) {
-                LLVMValueRef loadedBits = buildLoad(address, getMemoryAccessType(kind), getMemoryAccessSize(kind), MemoryOrderMode.VOLATILE);
+                LLVMValueRef loadedBits = buildLoad(address, getMemoryAccessType(kind), getMemoryAccessSize(kind), MemoryOrderMode.VOLATILE, needsAtomicAccess(memoryOrder));
                 LLVMValueRef loadedReference = builder.buildIntToPtr(buildIntegerResize(loadedBits, LLVMIRBuilder.integerTypeWidth(builder.wordType())), builder.objectType(isCompressedReferenceMemory(
                                 kind)));
                 load = buildReferenceValue(loadedReference, getType(kind), false);
             } else {
-                load = buildLoad(address, getType(kind), getMemoryAccessSize(kind), memoryOrder);
-                if (needsAtomicAccess(memoryOrder, getMemoryAccessSize(kind))) {
-                    builder.setAtomicMonotonic(load);
-                }
+                load = buildLoad(address, getType(kind), getMemoryAccessSize(kind), memoryOrder, needsAtomicAccess(memoryOrder));
             }
             if (memoryOrder == MemoryOrderMode.ACQUIRE || memoryOrder == MemoryOrderMode.VOLATILE) {
                 /*
@@ -2286,11 +2283,13 @@ public class LLVMGenerator extends CoreProvidersDelegate implements LIRGenerator
         }
 
         /**
-         * Accesses wider than a word are split up unless requested otherwise, which would allow
-         * other threads to observe torn volatile values on 32-bit targets.
+         * Accesses that other threads may race with must be atomic for LLVM: a racing non-atomic
+         * load has an undefined value even with fences around it, and accesses wider than a word
+         * are split up, which would expose torn values on 32-bit targets. The ordering itself comes
+         * from the explicit memory barriers.
          */
-        private static boolean needsAtomicAccess(MemoryOrderMode memoryOrder, int sizeInBytes) {
-            return memoryOrder != MemoryOrderMode.PLAIN && sizeInBytes > SubstrateTarget.getWordSize();
+        private static boolean needsAtomicAccess(MemoryOrderMode memoryOrder) {
+            return memoryOrder != MemoryOrderMode.PLAIN;
         }
 
         /**
@@ -2305,12 +2304,16 @@ public class LLVMGenerator extends CoreProvidersDelegate implements LIRGenerator
             return sizeInBytes;
         }
 
-        private LLVMValueRef buildLoad(Value address, LLVMTypeRef type, int sizeInBytes, MemoryOrderMode memoryOrder) {
+        private LLVMValueRef buildLoad(Value address, LLVMTypeRef type, int sizeInBytes, MemoryOrderMode alignmentOrder, boolean atomic) {
             LLVMPendingSpecialRegisterRead pendingRead = asPendingSpecialRegisterRead(address);
             if (pendingRead != null && pendingRead.useFixedRegisterAccess() && pendingRead.hasConstantOffset()) {
                 return buildInlineLoad(pendingRead.getRegisterName(), pendingRead.getConstantOffset(), type, sizeInBytes);
             }
-            return builder.buildAlignedLoad(getVal(address), type, getAccessAlignment(getVal(address), sizeInBytes, memoryOrder));
+            LLVMValueRef load = builder.buildAlignedLoad(getVal(address), type, getAccessAlignment(getVal(address), sizeInBytes, alignmentOrder));
+            if (atomic) {
+                builder.setAtomicMonotonic(load);
+            }
+            return load;
         }
 
         @Override
@@ -2345,7 +2348,7 @@ public class LLVMGenerator extends CoreProvidersDelegate implements LIRGenerator
                 LLVMTypeRef addressType = LLVMIRBuilder.typeOf(address);
                 LLVMValueRef castedAddress = builder.buildBitcast(address, builder.pointerType(storeType, LLVMIRBuilder.isObjectType(addressType), false));
                 LLVMValueRef store = builder.buildAlignedStore(castedValue, castedAddress, getAccessAlignment(castedAddress, accessSize, memoryOrder));
-                if (needsAtomicAccess(memoryOrder, accessSize)) {
+                if (needsAtomicAccess(memoryOrder)) {
                     builder.setAtomicMonotonic(store);
                 }
             }

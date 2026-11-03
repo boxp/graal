@@ -2265,12 +2265,12 @@ public class LLVMGenerator extends CoreProvidersDelegate implements LIRGenerator
             assert memoryOrder != MemoryOrderMode.RELEASE && memoryOrder != MemoryOrderMode.RELEASE_ACQUIRE;
             LLVMValueRef load;
             if (isReferenceKind(kind)) {
-                LLVMValueRef loadedBits = buildLoad(address, getMemoryAccessType(kind), getMemoryAccessSize(kind));
+                LLVMValueRef loadedBits = buildLoad(address, getMemoryAccessType(kind), getMemoryAccessSize(kind), MemoryOrderMode.VOLATILE);
                 LLVMValueRef loadedReference = builder.buildIntToPtr(buildIntegerResize(loadedBits, LLVMIRBuilder.integerTypeWidth(builder.wordType())), builder.objectType(isCompressedReferenceMemory(
                                 kind)));
                 load = buildReferenceValue(loadedReference, getType(kind), false);
             } else {
-                load = buildLoad(address, getType(kind), getMemoryAccessSize(kind));
+                load = buildLoad(address, getType(kind), getMemoryAccessSize(kind), memoryOrder);
                 if (needsAtomicAccess(memoryOrder, getMemoryAccessSize(kind))) {
                     builder.setAtomicMonotonic(load);
                 }
@@ -2293,12 +2293,24 @@ public class LLVMGenerator extends CoreProvidersDelegate implements LIRGenerator
             return memoryOrder != MemoryOrderMode.PLAIN && sizeInBytes > SubstrateTarget.getWordSize();
         }
 
-        private LLVMValueRef buildLoad(Value address, LLVMTypeRef type, int sizeInBytes) {
+        /**
+         * Raw memory accesses are not necessarily aligned, for example in the memory copy loops.
+         * ARMv7 supports this for single loads and stores, but it traps for the load/store multiple
+         * and double instructions that LLVM may pick if it is told that the access is aligned.
+         */
+        private static int getAccessAlignment(LLVMValueRef address, int sizeInBytes, MemoryOrderMode memoryOrder) {
+            if (Platform.includedIn(Platform.ARM32.class) && memoryOrder == MemoryOrderMode.PLAIN && !LLVMIRBuilder.isObjectType(LLVMIRBuilder.typeOf(address))) {
+                return 1;
+            }
+            return sizeInBytes;
+        }
+
+        private LLVMValueRef buildLoad(Value address, LLVMTypeRef type, int sizeInBytes, MemoryOrderMode memoryOrder) {
             LLVMPendingSpecialRegisterRead pendingRead = asPendingSpecialRegisterRead(address);
             if (pendingRead != null && pendingRead.useFixedRegisterAccess() && pendingRead.hasConstantOffset()) {
                 return buildInlineLoad(pendingRead.getRegisterName(), pendingRead.getConstantOffset(), type, sizeInBytes);
             }
-            return builder.buildAlignedLoad(getVal(address), type, sizeInBytes);
+            return builder.buildAlignedLoad(getVal(address), type, getAccessAlignment(getVal(address), sizeInBytes, memoryOrder));
         }
 
         @Override
@@ -2332,7 +2344,7 @@ public class LLVMGenerator extends CoreProvidersDelegate implements LIRGenerator
                 LLVMValueRef address = getVal(addr);
                 LLVMTypeRef addressType = LLVMIRBuilder.typeOf(address);
                 LLVMValueRef castedAddress = builder.buildBitcast(address, builder.pointerType(storeType, LLVMIRBuilder.isObjectType(addressType), false));
-                LLVMValueRef store = builder.buildAlignedStore(castedValue, castedAddress, accessSize);
+                LLVMValueRef store = builder.buildAlignedStore(castedValue, castedAddress, getAccessAlignment(castedAddress, accessSize, memoryOrder));
                 if (needsAtomicAccess(memoryOrder, accessSize)) {
                     builder.setAtomicMonotonic(store);
                 }
